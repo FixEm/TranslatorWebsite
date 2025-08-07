@@ -11,53 +11,55 @@ export default function Header() {
   };
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+    <header className="glass-effect shadow-elegant sticky top-0 z-50 border-b border-elegant">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
+        <div className="flex justify-between items-center h-20">
           <div className="flex items-center">
-            <Link href="/" className="flex-shrink-0 flex items-center">
-              <Languages className="text-navy-600 text-2xl mr-3" />
-              <span className="text-xl font-bold text-navy-800">PenerjemahChina</span>
+            <Link href="/" className="flex-shrink-0 flex items-center group">
+              <div className="p-2 bg-premium rounded-xl shadow-md group-hover:shadow-lg transition-all duration-300">
+                <Languages className="text-white h-6 w-6" />
+              </div>
+              <span className="text-xl font-bold text-premium ml-4 tracking-tight">PenerjemahChina</span>
             </Link>
           </div>
           
           <nav className="hidden md:flex space-x-8">
             <Link 
               href="/" 
-              className={`font-medium transition-colors ${
-                isActive("/") ? "text-navy-600" : "text-silver-600 hover:text-navy-600"
+              className={`font-semibold transition-all duration-200 hover:scale-105 ${
+                isActive("/") ? "text-accent" : "text-elegant hover:text-accent"
               }`}
             >
               Beranda
             </Link>
             <Link 
               href="/search" 
-              className={`font-medium transition-colors ${
-                isActive("/search") ? "text-navy-600" : "text-silver-600 hover:text-navy-600"
+              className={`font-semibold transition-all duration-200 hover:scale-105 ${
+                isActive("/search") ? "text-accent" : "text-elegant hover:text-accent"
               }`}
             >
               Cari Penerjemah
             </Link>
             <a 
               href="#cara-kerja" 
-              className="text-silver-600 hover:text-navy-600 font-medium transition-colors"
+              className="text-elegant hover:text-accent font-semibold transition-all duration-200 hover:scale-105"
             >
               Cara Kerja
             </a>
             <a 
               href="#tentang" 
-              className="text-silver-600 hover:text-navy-600 font-medium transition-colors"
+              className="text-elegant hover:text-accent font-semibold transition-all duration-200 hover:scale-105"
             >
               Tentang
             </a>
           </nav>
           
           <div className="flex items-center space-x-4">
-            <button className="text-navy-600 hover:text-navy-800 font-medium transition-colors">
+            <button className="text-accent hover:text-premium font-semibold transition-all duration-200 hover:scale-105">
               Masuk
             </button>
             <Link href="/register">
-              <button className="bg-navy-600 text-white px-4 py-2 rounded-lg hover:bg-navy-700 transition-colors font-medium">
+              <button className="bg-premium text-white px-6 py-3 rounded-xl hover:bg-premium shadow-elegant hover:shadow-luxury transition-all duration-300 font-semibold tracking-wide hover:scale-105 transform">
                 Daftar Sebagai Penerjemah
               </button>
             </Link>

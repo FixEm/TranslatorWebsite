@@ -35,71 +35,74 @@ export default function ServiceProviderCard({ provider }: ServiceProviderCardPro
   };
 
   return (
-    <Card className="overflow-hidden hover:shadow-xl transition-all transform hover:-translate-y-1">
+    <Card className="card-gradient overflow-hidden shadow-elegant hover:shadow-luxury transition-all duration-300 border-0 rounded-2xl group">
       <div className="relative">
-        <img 
-          src={provider.profileImage || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300"} 
-          alt={`${provider.name} profile`} 
-          className="w-full h-48 object-cover"
-        />
+        <div className="overflow-hidden rounded-t-2xl">
+          <img 
+            src={provider.profileImage || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300"} 
+            alt={`${provider.name} profile`} 
+            className="w-full h-56 object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        </div>
         {provider.isVerified && (
           <div className="absolute top-4 right-4">
-            <Badge className="bg-green-500 text-white flex items-center gap-1">
+            <div className="glass-effect bg-green-500/90 text-white px-3 py-1 rounded-full flex items-center gap-1 text-xs font-semibold">
               <CheckCircle className="w-3 h-3" />
               Terverifikasi
-            </Badge>
+            </div>
           </div>
         )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent rounded-t-2xl"></div>
       </div>
       
       <CardContent className="p-6">
-        <h3 className="text-xl font-bold text-navy-800 mb-2">{provider.name}</h3>
-        
-        <div className="flex items-center mb-3">
-          <MapPin className="w-4 h-4 text-silver-500 mr-2" />
-          <span className="text-silver-600">{provider.city}, China</span>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xl font-bold text-premium tracking-tight">{provider.name}</h3>
+          <span className="text-xl font-bold text-accent">¥{provider.pricePerDay}</span>
         </div>
         
         <div className="flex items-center mb-3">
-          <div className="flex text-yellow-400 mr-2">
+          <MapPin className="w-4 h-4 text-muted mr-2" />
+          <span className="text-muted font-medium">{provider.city}, China</span>
+        </div>
+        
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex text-yellow-400">
             {Array.from({ length: 5 }).map((_, i) => (
               <Star 
                 key={i} 
-                className={`w-4 h-4 ${i < Math.floor(parseFloat(provider.rating || "0")) ? "fill-current" : ""}`} 
+                className={`w-4 h-4 ${i < Math.floor(parseFloat(provider.rating || "0")) ? "fill-current" : "text-gray-300"}`} 
               />
             ))}
           </div>
-          <span className="text-sm text-silver-600">
+          <span className="text-sm text-muted font-medium">
             {provider.rating} ({provider.reviewCount} ulasan)
           </span>
         </div>
         
-        <p className="text-gray-700 mb-4 text-sm line-clamp-3">
+        <p className="text-elegant mb-4 text-sm leading-relaxed line-clamp-3">
           {provider.description}
         </p>
         
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex flex-wrap gap-1">
-            {(provider.services as string[]).slice(0, 2).map((service) => (
-              <Badge 
-                key={service} 
-                variant="secondary" 
-                className={`text-xs ${getServiceColor(service)}`}
-              >
-                {getServiceLabel(service)}
-              </Badge>
-            ))}
-            {(provider.services as string[]).length > 2 && (
-              <Badge variant="outline" className="text-xs">
-                +{(provider.services as string[]).length - 2}
-              </Badge>
-            )}
-          </div>
-          <span className="text-lg font-bold text-navy-600">¥{provider.pricePerDay}/hari</span>
+        <div className="flex flex-wrap gap-2 mb-6">
+          {(provider.services as string[]).slice(0, 3).map((service) => (
+            <Badge 
+              key={service} 
+              variant="secondary" 
+              className={`text-xs font-medium px-3 py-1 rounded-full ${getServiceColor(service)} border-0`}
+            >
+              {getServiceLabel(service)}
+            </Badge>
+          ))}
+          {(provider.services as string[]).length > 3 && (
+            <Badge variant="outline" className="text-xs font-medium px-3 py-1 rounded-full border-elegant text-muted">
+              +{(provider.services as string[]).length - 3} lagi
+            </Badge>
+          )}
         </div>
         
         <Link href={`/profile/${provider.id}`}>
-          <Button className="w-full bg-navy-600 hover:bg-navy-700 text-white">
+          <Button className="w-full bg-premium hover:bg-premium text-white font-semibold py-3 rounded-xl shadow-elegant hover:shadow-luxury transition-all duration-300 transform group-hover:scale-105">
             Lihat Profil Lengkap
           </Button>
         </Link>
