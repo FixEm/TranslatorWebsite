@@ -57,13 +57,13 @@ export default function ServiceProviderCard({ provider }: ServiceProviderCardPro
       
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xl font-bold text-premium tracking-tight">{provider.name}</h3>
+          <h3 className="text-xl font-bold text-slate-800 tracking-tight">{provider.name}</h3>
           <span className="text-xl font-bold text-accent">¥{provider.pricePerDay}</span>
         </div>
         
         <div className="flex items-center mb-3">
-          <MapPin className="w-4 h-4 text-muted mr-2" />
-          <span className="text-muted font-medium">{provider.city}, China</span>
+          <MapPin className="w-4 h-4 text-slate-600 mr-2" />
+          <span className="text-slate-600 font-medium">{provider.city}, China</span>
         </div>
         
         <div className="flex items-center justify-between mb-4">
@@ -75,12 +75,12 @@ export default function ServiceProviderCard({ provider }: ServiceProviderCardPro
               />
             ))}
           </div>
-          <span className="text-sm text-muted font-medium">
+          <span className="text-sm text-slate-600 font-medium">
             {provider.rating} ({provider.reviewCount} ulasan)
           </span>
         </div>
         
-        <p className="text-elegant mb-4 text-sm leading-relaxed line-clamp-3">
+        <p className="text-slate-700 mb-4 text-sm leading-relaxed line-clamp-3">
           {provider.description}
         </p>
         
@@ -95,7 +95,7 @@ export default function ServiceProviderCard({ provider }: ServiceProviderCardPro
             </Badge>
           ))}
           {(provider.services as string[]).length > 3 && (
-            <Badge variant="outline" className="text-xs font-medium px-3 py-1 rounded-full border-elegant text-muted">
+            <Badge variant="outline" className="text-xs font-medium px-3 py-1 rounded-full border-slate-300 text-slate-600">
               +{(provider.services as string[]).length - 3} lagi
             </Badge>
           )}

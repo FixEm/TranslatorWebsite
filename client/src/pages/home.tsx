@@ -113,10 +113,10 @@ export default function Home() {
               <CheckCircle className="w-4 h-4 mr-2" />
               Terverifikasi & Terpercaya
             </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-premium mb-6 tracking-tight">
+            <h2 className="text-4xl md:text-5xl font-bold text-slate-800 mb-6 tracking-tight">
               Penerjemah Premium Pilihan
             </h2>
-            <p className="text-xl text-muted max-w-3xl mx-auto leading-relaxed">
+            <p className="text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed">
               Temui para profesional terbaik kami yang telah melalui proses verifikasi ketat dan memiliki rekam jejak yang luar biasa
             </p>
           </div>
@@ -166,10 +166,10 @@ export default function Home() {
             <div className="inline-flex items-center px-4 py-2 rounded-full bg-premium-light text-accent font-semibold text-sm mb-6">
               Proses Mudah & Cepat
             </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-premium mb-6 tracking-tight">
+            <h2 className="text-4xl md:text-5xl font-bold text-slate-800 mb-6 tracking-tight">
               Cara Kerja Platform
             </h2>
-            <p className="text-xl text-muted max-w-3xl mx-auto leading-relaxed">
+            <p className="text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed">
               Proses sederhana dalam 3 langkah untuk mendapatkan layanan penerjemah profesional berkualitas tinggi
             </p>
           </div>
@@ -182,8 +182,8 @@ export default function Home() {
                 </div>
                 <div className="absolute -inset-4 bg-gradient-to-r from-blue-500/20 to-indigo-600/20 rounded-3xl blur opacity-0 group-hover:opacity-100 transition-all duration-300"></div>
               </div>
-              <h3 className="text-2xl font-bold text-premium mb-4">Cari & Filter</h3>
-              <p className="text-muted leading-relaxed">Gunakan filter canggih untuk menemukan penerjemah sesuai lokasi, keahlian, dan anggaran Anda dengan mudah</p>
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">Cari & Filter</h3>
+              <p className="text-slate-600 leading-relaxed">Gunakan filter canggih untuk menemukan penerjemah sesuai lokasi, keahlian, dan anggaran Anda dengan mudah</p>
             </div>
             <div className="text-center group">
               <div className="relative mb-8">
@@ -192,8 +192,8 @@ export default function Home() {
                 </div>
                 <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500/20 to-purple-600/20 rounded-3xl blur opacity-0 group-hover:opacity-100 transition-all duration-300"></div>
               </div>
-              <h3 className="text-2xl font-bold text-premium mb-4">Hubungi Langsung</h3>
-              <p className="text-muted leading-relaxed">Lihat profil lengkap dan hubungi penerjemah pilihan Anda melalui WhatsApp atau sistem pesan internal</p>
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">Hubungi Langsung</h3>
+              <p className="text-slate-600 leading-relaxed">Lihat profil lengkap dan hubungi penerjemah pilihan Anda melalui WhatsApp atau sistem pesan internal</p>
             </div>
             <div className="text-center group">
               <div className="relative mb-8">
@@ -202,8 +202,8 @@ export default function Home() {
                 </div>
                 <div className="absolute -inset-4 bg-gradient-to-r from-purple-500/20 to-pink-600/20 rounded-3xl blur opacity-0 group-hover:opacity-100 transition-all duration-300"></div>
               </div>
-              <h3 className="text-2xl font-bold text-premium mb-4">Dapatkan Layanan</h3>
-              <p className="text-muted leading-relaxed">Nikmati layanan penerjemah profesional dengan jaminan kualitas dan kepuasan pelanggan terbaik</p>
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">Dapatkan Layanan</h3>
+              <p className="text-slate-600 leading-relaxed">Nikmati layanan penerjemah profesional dengan jaminan kualitas dan kepuasan pelanggan terbaik</p>
             </div>
           </div>
         </div>

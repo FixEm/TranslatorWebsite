@@ -150,6 +150,14 @@
     color: var(--slate-500);
   }
   
+  .text-dark {
+    color: var(--slate-900);
+  }
+  
+  .text-readable {
+    color: var(--slate-800);
+  }
+  
   .bg-premium {
     background-color: var(--blue-600);
   }

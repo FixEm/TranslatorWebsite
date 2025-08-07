@@ -66,10 +66,10 @@ export default function SearchPage() {
             <Search className="w-4 h-4 mr-2" />
             Pencarian Profesional
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold text-premium mb-6 tracking-tight">
+          <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-6 tracking-tight">
             Cari Penerjemah & Tour Guide
           </h1>
-          <p className="text-xl text-muted max-w-3xl mx-auto leading-relaxed">
+          <p className="text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed">
             Gunakan filter canggih untuk menemukan profesional terverifikasi yang sesuai dengan kebutuhan Anda
           </p>
         </div>
@@ -79,11 +79,11 @@ export default function SearchPage() {
           <CardContent className="p-8">
             <div className="flex items-center mb-6">
               <Filter className="w-6 h-6 text-accent mr-3" />
-              <h3 className="text-xl font-bold text-premium">Filter Pencarian</h3>
+              <h3 className="text-xl font-bold text-slate-800">Filter Pencarian</h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div>
-                <label className="block text-sm font-semibold text-elegant mb-3">Kota</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-3">Kota</label>
                 <Select value={filters.city} onValueChange={(value) => setFilters({...filters, city: value})}>
                   <SelectTrigger className="border-elegant focus:border-premium focus:ring-premium rounded-xl h-12">
                     <SelectValue placeholder="Pilih Kota" />
@@ -98,7 +98,7 @@ export default function SearchPage() {
               </div>
               
               <div>
-                <label className="block text-sm font-semibold text-elegant mb-3">Jenis Layanan</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-3">Jenis Layanan</label>
                 <Select value={filters.service} onValueChange={(value) => setFilters({...filters, service: value})}>
                   <SelectTrigger className="border-elegant focus:border-premium focus:ring-premium rounded-xl h-12">
                     <SelectValue placeholder="Semua Layanan" />
@@ -113,7 +113,7 @@ export default function SearchPage() {
               </div>
               
               <div>
-                <label className="block text-sm font-semibold text-elegant mb-3">Ketersediaan</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-3">Ketersediaan</label>
                 <Input 
                   type="date" 
                   value={filters.availability}
@@ -139,7 +139,7 @@ export default function SearchPage() {
               <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mr-3">
                 <span className="text-white font-bold text-sm">{providers?.length || 0}</span>
               </div>
-              <p className="text-elegant font-semibold text-lg">
+              <p className="text-slate-700 font-semibold text-lg">
                 {isLoading ? "Mencari profesional..." : `Ditemukan ${providers?.length || 0} penerjemah profesional`}
               </p>
             </div>
@@ -171,8 +171,8 @@ export default function SearchPage() {
                 <div className="w-24 h-24 bg-premium-light rounded-full flex items-center justify-center mx-auto mb-6">
                   <Search className="w-12 h-12 text-accent" />
                 </div>
-                <h3 className="text-2xl font-bold text-premium mb-4">Tidak ada penerjemah ditemukan</h3>
-                <p className="text-muted text-lg mb-8 max-w-md mx-auto">
+                <h3 className="text-2xl font-bold text-slate-800 mb-4">Tidak ada penerjemah ditemukan</h3>
+                <p className="text-slate-600 text-lg mb-8 max-w-md mx-auto">
                   Coba ubah kriteria pencarian atau filter untuk hasil yang lebih luas
                 </p>
                 <Button 

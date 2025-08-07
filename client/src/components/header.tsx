@@ -19,7 +19,7 @@ export default function Header() {
               <div className="p-2 bg-premium rounded-xl shadow-md group-hover:shadow-lg transition-all duration-300">
                 <Languages className="text-white h-6 w-6" />
               </div>
-              <span className="text-xl font-bold text-premium ml-4 tracking-tight">PenerjemahChina</span>
+              <span className="text-xl font-bold text-slate-800 ml-4 tracking-tight">PenerjemahChina</span>
             </Link>
           </div>
           
@@ -27,7 +27,7 @@ export default function Header() {
             <Link 
               href="/" 
               className={`font-semibold transition-all duration-200 hover:scale-105 ${
-                isActive("/") ? "text-accent" : "text-elegant hover:text-accent"
+                isActive("/") ? "text-blue-600" : "text-slate-700 hover:text-blue-600"
               }`}
             >
               Beranda
@@ -35,27 +35,27 @@ export default function Header() {
             <Link 
               href="/search" 
               className={`font-semibold transition-all duration-200 hover:scale-105 ${
-                isActive("/search") ? "text-accent" : "text-elegant hover:text-accent"
+                isActive("/search") ? "text-blue-600" : "text-slate-700 hover:text-blue-600"
               }`}
             >
               Cari Penerjemah
             </Link>
             <a 
               href="#cara-kerja" 
-              className="text-elegant hover:text-accent font-semibold transition-all duration-200 hover:scale-105"
+              className="text-slate-700 hover:text-blue-600 font-semibold transition-all duration-200 hover:scale-105"
             >
               Cara Kerja
             </a>
             <a 
               href="#tentang" 
-              className="text-elegant hover:text-accent font-semibold transition-all duration-200 hover:scale-105"
+              className="text-slate-700 hover:text-blue-600 font-semibold transition-all duration-200 hover:scale-105"
             >
               Tentang
             </a>
           </nav>
           
           <div className="flex items-center space-x-4">
-            <button className="text-accent hover:text-premium font-semibold transition-all duration-200 hover:scale-105">
+            <button className="text-blue-600 hover:text-slate-800 font-semibold transition-all duration-200 hover:scale-105">
               Masuk
             </button>
             <Link href="/register">
