@@ -1,0 +1,133 @@
+🧪 MVP: Translator & Tour Guide Aggregator for Indonesians in China
+🎯 Goal:
+Allow Indonesian users to search, filter, and contact verified translators and tour guides in China.
+
+🧩 Core Features (MVP)
+1. Landing Page
+Clear value prop: "Temukan Penerjemah & Tour Guide Indonesia di China"
+
+Sections:
+
+How it works
+
+Featured translators/guides
+
+Call to action: “Cari Sekarang” / “Daftar Sebagai Penerjemah”
+
+2. Search & Browse Translators/Guides
+Filter:
+
+City (e.g., Shenzhen, Guangzhou, Shanghai)
+
+Role: Translator / Tour Guide / Both
+
+Availability (dates)
+
+Preview card:
+
+Name, photo, short intro, rating, location
+
+Button: View Profile
+
+3. Profile Page (for each service provider)
+Name, languages spoken
+
+Type of service (translator/tour guide)
+
+Location
+
+Pricing
+
+Bio / Experience
+
+Contact Button (WhatsApp, Telegram, or built-in form)
+
+4. Service Provider Onboarding Form
+For new translators/guides to register
+
+Name
+
+Profile picture
+
+City in China
+
+Languages
+
+Services offered
+
+Pricing
+
+Contact info (WhatsApp/WeChat/Telegram)
+
+Upload ID (for verification)
+
+5. Admin Dashboard (Simple)
+Approve/reject new signups
+
+View contact form logs
+
+Option to mark someone as “Verified”
+
+6. (Optional) Contact Form with Escrow
+User books translator, payment is held
+
+Release once service completed
+
+You take 10–15% fee
+
+You can skip this for v1 and just connect via WhatsApp
+
+🧰 Tech Stack (Fastest No-Code / Low-Code)
+Part	Tool
+Frontend	Framer or Webflow
+Backend	Airtable or Supabase
+Contact System	WhatsApp API or Zapier Email → WhatsApp
+Hosting	Vercel (if using Next.js) or directly from Framer
+Optional Login	Clerk / Supabase Auth
+Optional Escrow	Xendit / Midtrans (ID), Stripe (Global)
+
+🗺️ User Flow
+Visitor (Indonesian in China)
+
+Lands on website → clicks “Cari Penerjemah”
+
+Filters by city: e.g., Guangzhou → picks a translator
+
+Reads profile → contacts them directly via WhatsApp or Form
+
+Translator/Tour Guide
+
+Visits website → clicks “Daftar Sebagai Penerjemah”
+
+Fills form → waits for admin approval
+
+Once approved → profile appears in search
+
+💵 Monetization Ideas
+15% platform fee per booking (via escrow)
+
+Ads for premium providers (boosted listing)
+
+Verified badge (ID check = trust)
+
+Subscription for translators (unlimited leads)
+
+🧪 Validation Plan (Test for 1 week)
+Build MVP with 5 dummy translator profiles
+
+Post on Indo-China groups (WeChat, LINE, Telegram, FB)
+
+See how many visitors click/contact providers
+
+If good response → onboard real service providers
+
+✅ Deliverables I Can Help You Build
+Figma/Framer MVP design
+
+Airtable base for provider data
+
+Website with filter/search + contact buttons
+
+Onboarding form with Zapier → Airtable/Supabase
+
+Optional: connect with WhatsApp or Telegram Bot
