@@ -3,7 +3,7 @@ import { Link } from "wouter";
 
 export default function Footer() {
   return (
-    <footer className="bg-navy-900 text-white py-16">
+    <footer className="bg-slate-800 text-white py-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="md:col-span-2">
@@ -51,14 +51,14 @@ export default function Footer() {
           </div>
         </div>
         
-        <div className="border-t border-gray-700 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
-          <p className="text-gray-400 text-sm">
+        <div className="border-t border-white/20 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
+          <p className="text-gray-300 text-sm">
             © 2024 PenerjemahChina. Semua hak dilindungi undang-undang.
           </p>
           <div className="flex space-x-6 mt-4 md:mt-0">
-            <a href="#" className="text-gray-400 hover:text-white text-sm transition-colors">Kebijakan Privasi</a>
-            <a href="#" className="text-gray-400 hover:text-white text-sm transition-colors">Syarat Ketentuan</a>
-            <a href="#" className="text-gray-400 hover:text-white text-sm transition-colors">FAQ</a>
+            <a href="#" className="text-gray-300 hover:text-white text-sm transition-colors">Kebijakan Privasi</a>
+            <a href="#" className="text-gray-300 hover:text-white text-sm transition-colors">Syarat Ketentuan</a>
+            <a href="#" className="text-gray-300 hover:text-white text-sm transition-colors">FAQ</a>
           </div>
         </div>
       </div>
