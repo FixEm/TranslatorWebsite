@@ -80,24 +80,24 @@ export default function Home() {
         </div>
         
         {/* Premium trust indicators */}
-        <div className="relative glass-effect border-t border-white/20">
+        <div className="relative bg-slate-800/90 border-t border-white/20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
               <div className="group hover:scale-105 transition-transform duration-300">
                 <div className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-indigo-400">500+</div>
-                <div className="text-sm text-white/80 font-medium">Penerjemah Terdaftar</div>
+                <div className="text-sm text-white font-medium">Penerjemah Terdaftar</div>
               </div>
               <div className="group hover:scale-105 transition-transform duration-300">
                 <div className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-400">15</div>
-                <div className="text-sm text-white/80 font-medium">Kota di China</div>
+                <div className="text-sm text-white font-medium">Kota di China</div>
               </div>
               <div className="group hover:scale-105 transition-transform duration-300">
                 <div className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-300 to-pink-400">98%</div>
-                <div className="text-sm text-white/80 font-medium">Tingkat Kepuasan</div>
+                <div className="text-sm text-white font-medium">Tingkat Kepuasan</div>
               </div>
               <div className="group hover:scale-105 transition-transform duration-300">
                 <div className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-300 to-rose-400">24/7</div>
-                <div className="text-sm text-white/80 font-medium">Dukungan Pelanggan</div>
+                <div className="text-sm text-white font-medium">Dukungan Pelanggan</div>
               </div>
             </div>
           </div>
