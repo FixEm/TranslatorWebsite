@@ -155,6 +155,66 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Student Translator Program */}
+      <section className="py-20 bg-gradient-to-br from-blue-50 to-indigo-50 relative overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute top-20 left-20 w-72 h-72 bg-blue-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse"></div>
+          <div className="absolute bottom-20 right-20 w-80 h-80 bg-indigo-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse animation-delay-2000"></div>
+        </div>
+        
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-100 text-blue-700 font-semibold text-sm mb-6">
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Program Mahasiswa Terpercaya
+            </div>
+            <h2 className="text-4xl md:text-5xl font-bold text-slate-800 mb-6 tracking-tight">
+              Bergabung Sebagai Student Translator
+            </h2>
+            <p className="text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed mb-8">
+              Khusus untuk mahasiswa Indonesia di China dan mahasiswa China dengan email @student.ac.id atau @edu.cn
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+            <div className="bg-white rounded-2xl p-8 shadow-elegant hover:shadow-luxury transition-all duration-300 transform hover:scale-105">
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-6">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 mb-4">Verifikasi Email</h3>
+              <p className="text-slate-600">Gunakan email universitas resmi (@student.ac.id atau @edu.cn) untuk verifikasi instan</p>
+            </div>
+            
+            <div className="bg-white rounded-2xl p-8 shadow-elegant hover:shadow-luxury transition-all duration-300 transform hover:scale-105">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-6">
+                <CheckCircle className="w-6 h-6 text-blue-600" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 mb-4">Upload Dokumen</h3>
+              <p className="text-slate-600">Upload kartu mahasiswa dan sertifikat HSK untuk meningkatkan kredibilitas</p>
+            </div>
+            
+            <div className="bg-white rounded-2xl p-8 shadow-elegant hover:shadow-luxury transition-all duration-300 transform hover:scale-105">
+              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-6">
+                <CheckCircle className="w-6 h-6 text-purple-600" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 mb-4">Video Introduction</h3>
+              <p className="text-slate-600">Rekam video perkenalan dalam bahasa Indonesia dan Mandarin</p>
+            </div>
+          </div>
+
+          <div className="text-center">
+            <Link href="/translator/signup">
+              <Button 
+                size="lg" 
+                className="bg-premium text-white px-8 py-4 text-lg font-semibold rounded-xl shadow-elegant hover:shadow-luxury transition-all duration-300 transform hover:scale-105"
+              >
+                Daftar Sebagai Student Translator
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* How It Works */}
       <section id="cara-kerja" className="py-20 bg-elegant relative overflow-hidden">
         <div className="absolute inset-0">

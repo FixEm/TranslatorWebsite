@@ -1,9 +1,8 @@
 import 'dotenv/config';
 import { type ServiceProvider, type InsertServiceProvider, type Application, type InsertApplication, type Contact, type InsertContact, type User, type InsertUser } from "@shared/schema";
 import { db } from "./firebase";
-import { IStorage } from "./storage-interface";
 
-export class FirebaseStorage implements IStorage {
+export class FirebaseStorage {
   private usersCollection = db.collection('users');
   private serviceProvidersCollection = db.collection('service_providers');
   private applicationsCollection = db.collection('applications');
@@ -27,7 +26,7 @@ export class FirebaseStorage implements IStorage {
     return { id: docRef.id, ...user };
   }
 
-  async getServiceProviders(filters?: { city?: string; services?: string[]; minRating?: number }): Promise<ServiceProvider[]> {
+  async getServiceProviders(filters?: { city?: string; services?: string[]; minRating?: number; email?: string }): Promise<ServiceProvider[]> {
     console.log("🔥 Firebase: Getting service providers with filters:", filters);
     
     // Temporarily remove the isVerified filter to see all data
@@ -35,6 +34,10 @@ export class FirebaseStorage implements IStorage {
     
     if (filters?.city) {
       query = query.where('city', '==', filters.city);
+    }
+    
+    if (filters?.email) {
+      query = query.where('email', '==', filters.email);
     }
     
     console.log("🔥 Firebase: Executing query...");
@@ -90,7 +93,7 @@ export class FirebaseStorage implements IStorage {
   }
 
   async createServiceProvider(provider: InsertServiceProvider): Promise<ServiceProvider> {
-    const newProvider: ServiceProvider = {
+    const newProvider = {
       ...provider,
       id: '', // Will be set after creation
       isVerified: false,
@@ -101,19 +104,79 @@ export class FirebaseStorage implements IStorage {
       certificates: provider.certificates || null,
       createdAt: new Date(),
       updatedAt: new Date(),
+      // New verification workflow fields
+      googleId: provider.googleId || null,
+      studentIdDocument: null,
+      hskCertificate: null,
+      introVideo: null,
+      verificationSteps: {
+        emailVerified: false,
+        studentIdUploaded: false,
+        hskUploaded: false,
+        introVideoUploaded: false,
+        adminApproved: false
+      },
+      completenessScore: 0,
+      intent: provider.intent || 'translator',
+      studentEmail: provider.studentEmail || null,
+      yearsInChina: provider.yearsInChina || null
     };
     
     const docRef = await this.serviceProvidersCollection.add(newProvider);
-    return { ...newProvider, id: docRef.id };
+    return { ...newProvider, id: docRef.id } as ServiceProvider;
   }
 
-  async updateServiceProvider(id: string, updates: Partial<ServiceProvider>): Promise<ServiceProvider | undefined> {
-    const updatedData = { ...updates, updatedAt: new Date() };
-    await this.serviceProvidersCollection.doc(id).update(updatedData);
+  async createApplication(application: InsertApplication): Promise<Application> {
+    const newApplication = {
+      ...application,
+      id: '', // Will be set after creation
+      status: "pending",
+      profileImage: application.profileImage || null,
+      identityDocument: application.identityDocument || null,
+      certificates: application.certificates || null,
+      createdAt: new Date(),
+      // New verification workflow fields
+      googleId: application.googleId || null,
+      studentIdDocument: null,
+      hskCertificate: null,
+      introVideo: null,
+      verificationSteps: {
+        emailVerified: false,
+        studentIdUploaded: false,
+        hskUploaded: false,
+        introVideoUploaded: false,
+        adminApproved: false
+      },
+      completenessScore: 0,
+      intent: application.intent || 'translator',
+      studentEmail: application.studentEmail || null,
+      yearsInChina: application.yearsInChina || null,
+      adminNotes: null
+    };
     
-    const doc = await this.serviceProvidersCollection.doc(id).get();
-    if (!doc.exists) return undefined;
-    return { id: doc.id, ...doc.data() } as ServiceProvider;
+    const docRef = await this.applicationsCollection.add(newApplication);
+    return { ...newApplication, id: docRef.id } as Application;
+  }
+
+  // New methods for verification workflow
+  async verifyEmail(userId: string): Promise<void> {
+    await this.applicationsCollection.doc(userId).update({
+      'verificationSteps.emailVerified': true,
+      verifiedAt: new Date().toISOString()
+    });
+  }
+
+  async getApplication(id: string): Promise<Application | undefined> {
+    const doc = await this.applicationsCollection.doc(id).get();
+    
+    if (!doc.exists) {
+      return undefined;
+    }
+    
+    return {
+      id: doc.id,
+      ...doc.data()
+    } as Application;
   }
 
   async getApplications(status?: string): Promise<Application[]> {
@@ -124,31 +187,14 @@ export class FirebaseStorage implements IStorage {
     }
     
     const snapshot = await query.get();
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Application));
-  }
-
-  async getApplication(id: string): Promise<Application | undefined> {
-    const doc = await this.applicationsCollection.doc(id).get();
-    if (!doc.exists) return undefined;
-    return { id: doc.id, ...doc.data() } as Application;
-  }
-
-  async createApplication(application: InsertApplication): Promise<Application> {
-    const newApplication: Application = {
-      ...application,
-      id: '', // Will be set after creation
-      status: "pending",
-      profileImage: application.profileImage || null,
-      identityDocument: application.identityDocument || null,
-      certificates: application.certificates || null,
-      createdAt: new Date(),
-    };
-    
-    const docRef = await this.applicationsCollection.add(newApplication);
-    return { ...newApplication, id: docRef.id };
+    return snapshot.docs.map(doc => {
+      const data = doc.data() || {};
+      const { id: _, ...cleanData } = data;
+      return {
+        ...cleanData,
+        id: doc.id
+      } as Application;
+    });
   }
 
   async updateApplicationStatus(id: string, status: string): Promise<Application | undefined> {
@@ -156,7 +202,30 @@ export class FirebaseStorage implements IStorage {
     
     const doc = await this.applicationsCollection.doc(id).get();
     if (!doc.exists) return undefined;
-    return { id: doc.id, ...doc.data() } as Application;
+    
+    const data = doc.data() || {};
+    const { id: _, ...cleanData } = data;
+    
+    return {
+      ...cleanData,
+      id: doc.id
+    } as Application;
+  }
+
+  async updateServiceProvider(id: string, updates: Partial<ServiceProvider>): Promise<ServiceProvider | undefined> {
+    const updatedData = { ...updates, updatedAt: new Date() };
+    await this.serviceProvidersCollection.doc(id).update(updatedData);
+    
+    const doc = await this.serviceProvidersCollection.doc(id).get();
+    if (!doc.exists) return undefined;
+    
+    const data = doc.data() || {};
+    const { id: _, ...cleanData } = data;
+    
+    return {
+      ...cleanData,
+      id: doc.id
+    } as ServiceProvider;
   }
 
   async createContact(contact: InsertContact): Promise<Contact> {
@@ -177,6 +246,79 @@ export class FirebaseStorage implements IStorage {
       id: doc.id,
       ...doc.data()
     } as Contact));
+  }
+
+  // Email verification methods for applications
+  async updateApplicationEmailVerification(id: string, firebaseUid?: string): Promise<void> {
+    const updateData: any = {
+      'verificationSteps.emailVerified': true,
+      emailVerifiedAt: new Date().toISOString(),
+      updatedAt: new Date()
+    };
+    
+    if (firebaseUid) {
+      updateData.firebaseUid = firebaseUid;
+    }
+    
+    await this.applicationsCollection.doc(id).update(updateData);
+  }
+
+  async getApplicationByEmail(email: string): Promise<Application | undefined> {
+    const snapshot = await this.applicationsCollection.where('email', '==', email).get();
+    if (snapshot.empty) return undefined;
+    
+    const doc = snapshot.docs[0];
+    return {
+      id: doc.id,
+      ...doc.data()
+    } as Application;
+  }
+
+  // Document upload methods for applications
+  async updateStudentDocument(id: string, documentUrl: string): Promise<void> {
+    await this.applicationsCollection.doc(id).update({
+      studentIdDocument: documentUrl,
+      'verificationSteps.studentIdUploaded': true,
+      updatedAt: new Date()
+    });
+  }
+
+  async updateHskCertificate(id: string, certificateUrl: string): Promise<void> {
+    await this.applicationsCollection.doc(id).update({
+      hskCertificate: certificateUrl,
+      'verificationSteps.hskUploaded': true,
+      updatedAt: new Date()
+    });
+  }
+
+  async updateIntroVideo(id: string, videoUrl: string): Promise<void> {
+    await this.applicationsCollection.doc(id).update({
+      introVideo: videoUrl,
+      'verificationSteps.introVideoUploaded': true,
+      updatedAt: new Date()
+    });
+  }
+
+  async approveApplication(id: string, adminNotes?: string): Promise<void> {
+    await this.applicationsCollection.doc(id).update({
+      'verificationSteps.adminApproved': true,
+      isVerified: true,
+      status: 'approved',
+      adminNotes,
+      approvedAt: new Date().toISOString(),
+      updatedAt: new Date()
+    });
+  }
+
+  async rejectApplication(id: string, adminNotes?: string): Promise<void> {
+    await this.applicationsCollection.doc(id).update({
+      'verificationSteps.adminApproved': false,
+      isVerified: false,
+      status: 'rejected',
+      adminNotes,
+      rejectedAt: new Date().toISOString(),
+      updatedAt: new Date()
+    });
   }
 }
 

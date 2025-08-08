@@ -4,6 +4,7 @@ import { FirebaseStorage } from "./firebase-storage";
 import { insertApplicationSchema, insertContactSchema } from "@shared/schema";
 import multer from "multer";
 import path from "path";
+import verificationRoutes from "./verification-routes";
 
 // Create Firebase storage instance
 const storage = new FirebaseStorage();
@@ -137,6 +138,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           profileImage: application.profileImage,
           identityDocument: application.identityDocument,
           certificates: Array.isArray(application.certificates) ? application.certificates : [],
+          intent: (application.intent || 'translator') as 'translator' | 'tour_guide' | 'both',
         };
         
         await storage.createServiceProvider(providerData);
@@ -188,6 +190,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch stats" });
     }
   });
+
+  // Add verification routes
+  app.use("/api", verificationRoutes);
 
   const httpServer = createServer(app);
   return httpServer;

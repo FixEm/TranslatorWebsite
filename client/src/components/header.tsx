@@ -58,7 +58,7 @@ export default function Header() {
             <button className="text-blue-600 hover:text-slate-800 font-semibold transition-all duration-200 hover:scale-105">
               Masuk
             </button>
-            <Link href="/register">
+            <Link href="/translator/signup">
               <button className="bg-premium text-white px-6 py-3 rounded-xl hover:bg-premium shadow-elegant hover:shadow-luxury transition-all duration-300 font-semibold tracking-wide hover:scale-105 transform">
                 Daftar Sebagai Penerjemah
               </button>

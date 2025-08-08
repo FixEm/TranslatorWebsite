@@ -8,6 +8,8 @@ import Search from "@/pages/search";
 import Profile from "@/pages/profile";
 import Register from "@/pages/register";
 import Admin from "@/pages/admin";
+import TranslatorSignup from "@/pages/translator-signup";
+import AdminDashboard from "@/pages/admin-dashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -18,6 +20,8 @@ function Router() {
       <Route path="/profile/:id" component={Profile} />
       <Route path="/register" component={Register} />
       <Route path="/admin" component={Admin} />
+      <Route path="/translator/signup" component={TranslatorSignup} />
+      <Route path="/admin/dashboard" component={AdminDashboard} />
       <Route component={NotFound} />
     </Switch>
   );

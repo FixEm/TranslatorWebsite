@@ -23,6 +23,22 @@ export interface FirebaseServiceProvider {
   reviewCount: number;
   createdAt: Date;
   updatedAt: Date;
+  // New verification workflow fields
+  googleId?: string;
+  studentIdDocument?: string | null;
+  hskCertificate?: string | null;
+  introVideo?: string | null;
+  verificationSteps: {
+    emailVerified: boolean;
+    studentIdUploaded: boolean;
+    hskUploaded: boolean;
+    introVideoUploaded: boolean;
+    adminApproved: boolean;
+  };
+  completenessScore: number; // 0-100
+  studentEmail?: string; // for .ac.id or .edu.cn verification
+  intent: 'translator' | 'tour_guide' | 'both';
+  yearsInChina?: number;
 }
 
 export interface FirebaseApplication {
@@ -40,6 +56,24 @@ export interface FirebaseApplication {
   certificates: string[] | null; // Firebase stores as array
   status: string;
   createdAt: Date;
+  // New verification workflow fields
+  googleId?: string;
+  firebaseUid?: string; // Firebase Auth user ID
+  studentIdDocument?: string | null;
+  hskCertificate?: string | null;
+  introVideo?: string | null;
+  verificationSteps: {
+    emailVerified: boolean;
+    studentIdUploaded: boolean;
+    hskUploaded: boolean;
+    introVideoUploaded: boolean;
+    adminApproved: boolean;
+  };
+  completenessScore: number;
+  studentEmail?: string;
+  intent: 'translator' | 'tour_guide' | 'both';
+  yearsInChina?: number;
+  adminNotes?: string; // For admin review comments
 }
 
 export interface FirebaseContact {
@@ -56,12 +90,20 @@ export interface FirebaseUser {
   id: string;
   username: string;
   password: string;
+  googleId?: string;
+  email?: string;
+  profileImage?: string;
+  role: 'user' | 'admin' | 'translator';
 }
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  googleId: text("google_id"),
+  email: text("email"),
+  profileImage: text("profile_image"),
+  role: text("role").default("user"), // 'user' | 'admin' | 'translator'
 });
 
 export const serviceProviders = pgTable("service_providers", {
@@ -83,6 +125,22 @@ export const serviceProviders = pgTable("service_providers", {
   reviewCount: integer("review_count").default(0),
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
+  // New verification workflow fields
+  googleId: text("google_id"),
+  studentIdDocument: text("student_id_document"),
+  hskCertificate: text("hsk_certificate"),
+  introVideo: text("intro_video"),
+  verificationSteps: jsonb("verification_steps").default(JSON.stringify({
+    emailVerified: false,
+    studentIdUploaded: false,
+    hskUploaded: false,
+    introVideoUploaded: false,
+    adminApproved: false
+  })),
+  completenessScore: integer("completeness_score").default(0),
+  studentEmail: text("student_email"),
+  intent: text("intent").notNull().default("translator"), // 'translator' | 'tour_guide' | 'both'
+  yearsInChina: integer("years_in_china"),
 });
 
 export const applications = pgTable("applications", {
@@ -100,6 +158,23 @@ export const applications = pgTable("applications", {
   certificates: jsonb("certificates"),
   status: text("status").default("pending"), // pending, approved, rejected
   createdAt: timestamp("created_at").default(sql`now()`),
+  // New verification workflow fields
+  googleId: text("google_id"),
+  studentIdDocument: text("student_id_document"),
+  hskCertificate: text("hsk_certificate"),
+  introVideo: text("intro_video"),
+  verificationSteps: jsonb("verification_steps").default(JSON.stringify({
+    emailVerified: false,
+    studentIdUploaded: false,
+    hskUploaded: false,
+    introVideoUploaded: false,
+    adminApproved: false
+  })),
+  completenessScore: integer("completeness_score").default(0),
+  studentEmail: text("student_email"),
+  intent: text("intent").notNull().default("translator"),
+  yearsInChina: integer("years_in_china"),
+  adminNotes: text("admin_notes"),
 });
 
 export const contacts = pgTable("contacts", {
@@ -119,12 +194,27 @@ export const insertServiceProviderSchema = createInsertSchema(serviceProviders).
   reviewCount: true,
   createdAt: true,
   updatedAt: true,
+  verificationSteps: true,
+  completenessScore: true,
+}).extend({
+  intent: z.enum(['translator', 'tour_guide', 'both']).default('translator'),
+  yearsInChina: z.number().optional(),
+  googleId: z.string().optional(),
+  studentEmail: z.string().optional(),
 });
 
 export const insertApplicationSchema = createInsertSchema(applications).omit({
   id: true,
   status: true,
   createdAt: true,
+  verificationSteps: true,
+  completenessScore: true,
+  adminNotes: true,
+}).extend({
+  intent: z.enum(['translator', 'tour_guide', 'both']).default('translator'),
+  yearsInChina: z.number().optional(),
+  googleId: z.string().optional(),
+  studentEmail: z.string().optional(),
 });
 
 export const insertContactSchema = createInsertSchema(contacts).omit({
@@ -135,6 +225,11 @@ export const insertContactSchema = createInsertSchema(contacts).omit({
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+}).extend({
+  googleId: z.string().optional(),
+  email: z.string().optional(),
+  profileImage: z.string().optional(),
+  role: z.enum(['user', 'admin', 'translator']).default('user'),
 });
 
 export type InsertServiceProvider = z.infer<typeof insertServiceProviderSchema>;
