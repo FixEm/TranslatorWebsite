@@ -58,13 +58,13 @@ export default function TranslatorSignup() {
     try {
       // Initialize Google Sign-In (you'll need to implement this)
       toast({
-        title: "Google Sign-In",
-        description: "Google Sign-In integration will be implemented here",
+        title: "Masuk dengan Google",
+        description: "Integrasi Google Sign-In akan diimplementasikan di sini",
       });
     } catch (error) {
       toast({
-        title: "Sign-in Failed",
-        description: "Unable to sign in with Google. Please try again.",
+        title: "Gagal Masuk",
+        description: "Tidak dapat masuk dengan Google. Silakan coba lagi.",
         variant: "destructive",
       });
     }
@@ -92,13 +92,13 @@ export default function TranslatorSignup() {
       setCurrentStep(3); // Skip to upload step
 
       toast({
-        title: "Application Created",
-        description: "Your application has been created successfully!",
+        title: "Aplikasi Dibuat",
+        description: "Aplikasi Anda telah berhasil dibuat!",
       });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to create application. Please try again.",
+        description: "Gagal membuat aplikasi. Silakan coba lagi.",
         variant: "destructive",
       });
     } finally {
@@ -126,13 +126,13 @@ export default function TranslatorSignup() {
       setApplication(prev => ({ ...prev, ...result.provider }));
 
       toast({
-        title: "Upload Successful",
-        description: `Your ${type} has been uploaded successfully!`,
+        title: "Upload Berhasil",
+        description: `${type} Anda telah berhasil diupload!`,
       });
     } catch (error) {
       toast({
-        title: "Upload Failed",
-        description: `Failed to upload ${type}. Please try again.`,
+        title: "Upload Gagal",
+        description: `Gagal mengupload ${type}. Silakan coba lagi.`,
         variant: "destructive",
       });
     }
@@ -156,9 +156,9 @@ export default function TranslatorSignup() {
       <div className="max-w-md mx-auto mt-8">
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Join as Student Translator</CardTitle>
+            <CardTitle className="text-2xl">Bergabung Sebagai Penerjemah Mahasiswa</CardTitle>
             <CardDescription>
-              Help connect Indonesian students with translation and tour guide services
+              Bantu menghubungkan mahasiswa Indonesia dengan layanan terjemahan dan tur
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -173,11 +173,11 @@ export default function TranslatorSignup() {
                 <path fill="#fbbc05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                 <path fill="#ea4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
-              Sign in with Google
+              Masuk dengan Google
             </Button>
             
             <div className="text-center text-sm text-gray-500">
-              Use your @student.ac.id or @edu.cn email for instant verification
+              Gunakan email @student.ac.id atau @edu.cn untuk verifikasi instan
             </div>
             
             <Button 
@@ -185,7 +185,7 @@ export default function TranslatorSignup() {
               className="w-full"
               variant="secondary"
             >
-              Sign up manually
+              Daftar manual
             </Button>
           </CardContent>
         </Card>
@@ -198,20 +198,20 @@ export default function TranslatorSignup() {
       <div className="max-w-2xl mx-auto mt-8">
         <Card>
           <CardHeader>
-            <CardTitle>Basic Profile Information</CardTitle>
+            <CardTitle>Informasi Profil Dasar</CardTitle>
             <CardDescription>
-              Tell us about yourself and your translation/guide services
+              Ceritakan tentang diri Anda dan layanan terjemahan/guide yang Anda tawarkan
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name">Nama Lengkap</Label>
                 <Input
                   id="name"
                   value={application.name}
                   onChange={(e) => setApplication(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Your full name"
+                  placeholder="Nama lengkap Anda"
                   required
                 />
               </div>
@@ -222,7 +222,7 @@ export default function TranslatorSignup() {
                   type="email"
                   value={application.email}
                   onChange={(e) => setApplication(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="your.email@student.ac.id or @edu.cn"
+                  placeholder="your.email@student.ac.id atau @edu.cn"
                   required
                 />
               </div>
@@ -230,7 +230,7 @@ export default function TranslatorSignup() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="whatsapp">WhatsApp Number</Label>
+                <Label htmlFor="whatsapp">Nomor WhatsApp</Label>
                 <Input
                   id="whatsapp"
                   value={application.whatsapp}
@@ -240,10 +240,10 @@ export default function TranslatorSignup() {
                 />
               </div>
               <div>
-                <Label htmlFor="city">City in China</Label>
+                <Label htmlFor="city">Kota di China</Label>
                 <Select value={application.city} onValueChange={(value) => setApplication(prev => ({ ...prev, city: value }))}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select city" />
+                    <SelectValue placeholder="Pilih kota" />
                   </SelectTrigger>
                   <SelectContent>
                     {cities.map((city) => (
@@ -256,37 +256,37 @@ export default function TranslatorSignup() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="intent">Service Type</Label>
+                <Label htmlFor="intent">Jenis Layanan</Label>
                 <Select value={application.intent} onValueChange={(value: any) => setApplication(prev => ({ ...prev, intent: value }))}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select service" />
+                    <SelectValue placeholder="Pilih layanan" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="translator">Translator</SelectItem>
+                    <SelectItem value="translator">Penerjemah</SelectItem>
                     <SelectItem value="tour_guide">Tour Guide</SelectItem>
-                    <SelectItem value="both">Both</SelectItem>
+                    <SelectItem value="both">Keduanya</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label htmlFor="experience">Experience</Label>
+                <Label htmlFor="experience">Pengalaman</Label>
                 <Select value={application.experience} onValueChange={(value) => setApplication(prev => ({ ...prev, experience: value }))}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Years of experience" />
+                    <SelectValue placeholder="Tahun pengalaman" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="0-1">0-1 years</SelectItem>
-                    <SelectItem value="2-3">2-3 years</SelectItem>
-                    <SelectItem value="4-5">4-5 years</SelectItem>
-                    <SelectItem value="6-10">6-10 years</SelectItem>
-                    <SelectItem value="10+">10+ years</SelectItem>
+                    <SelectItem value="0-1">0-1 tahun</SelectItem>
+                    <SelectItem value="2-3">2-3 tahun</SelectItem>
+                    <SelectItem value="4-5">4-5 tahun</SelectItem>
+                    <SelectItem value="6-10">6-10 tahun</SelectItem>
+                    <SelectItem value="10+">10+ tahun</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div>
-              <Label htmlFor="pricePerDay">Price per Day (CNY)</Label>
+              <Label htmlFor="pricePerDay">Tarif per Hari (¥)</Label>
               <Input
                 id="pricePerDay"
                 value={application.pricePerDay}
@@ -298,12 +298,12 @@ export default function TranslatorSignup() {
             </div>
 
             <div>
-              <Label htmlFor="description">About You</Label>
+              <Label htmlFor="description">Tentang Anda</Label>
               <Textarea
                 id="description"
                 value={application.description}
                 onChange={(e) => setApplication(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Describe your experience, specializations, and what makes you a great translator/guide..."
+                placeholder="Deskripsikan pengalaman, spesialisasi, dan apa yang membuat Anda penerjemah/guide yang hebat..."
                 className="min-h-[100px]"
                 required
               />
@@ -311,13 +311,13 @@ export default function TranslatorSignup() {
           </CardContent>
           <CardFooter className="flex justify-between">
             <Button variant="outline" onClick={() => setCurrentStep(1)}>
-              Back
+              Kembali
             </Button>
             <Button 
               onClick={handleBasicInfoSubmit}
               disabled={isSubmitting || !application.name || !application.email}
             >
-              {isSubmitting ? "Creating..." : "Continue"}
+              {isSubmitting ? "Membuat..." : "Lanjutkan"}
             </Button>
           </CardFooter>
         </Card>
@@ -333,13 +333,13 @@ export default function TranslatorSignup() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-              Verification Progress
+              Progres Verifikasi
               <Badge variant={completenessScore >= 100 ? "default" : "secondary"}>
-                {completenessScore}% Complete
+                {completenessScore}% Selesai
               </Badge>
             </CardTitle>
             <CardDescription>
-              Complete all steps to get your profile verified and listed
+              Lengkapi semua langkah untuk memverifikasi dan mencantumkan profil Anda
             </CardDescription>
             <Progress value={completenessScore} className="w-full" />
           </CardHeader>
@@ -349,12 +349,12 @@ export default function TranslatorSignup() {
               <div className="flex items-center space-x-3">
                 {getStepIcon('emailVerified', application.verificationSteps.emailVerified)}
                 <div>
-                  <h3 className="font-medium">Email Verification</h3>
-                  <p className="text-sm text-gray-600">Verify your student email address</p>
+                  <h3 className="font-medium">Verifikasi Email</h3>
+                  <p className="text-sm text-gray-600">Verifikasi alamat email mahasiswa Anda</p>
                 </div>
               </div>
               <Badge variant={application.verificationSteps.emailVerified ? "default" : "outline"}>
-                30 points
+                30 poin
               </Badge>
             </div>
 
@@ -363,13 +363,13 @@ export default function TranslatorSignup() {
               <div className="flex items-center space-x-3">
                 {getStepIcon('studentIdUploaded', application.verificationSteps.studentIdUploaded)}
                 <div>
-                  <h3 className="font-medium">Student ID Document</h3>
-                  <p className="text-sm text-gray-600">Upload your student ID or HSK certificate</p>
+                  <h3 className="font-medium">Dokumen Kartu Mahasiswa</h3>
+                  <p className="text-sm text-gray-600">Upload kartu mahasiswa atau sertifikat HSK Anda</p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
                 <Badge variant={application.verificationSteps.studentIdUploaded ? "default" : "outline"}>
-                  20 points
+                  20 poin
                 </Badge>
                 {!application.verificationSteps.studentIdUploaded && (
                   <Button
@@ -396,13 +396,13 @@ export default function TranslatorSignup() {
               <div className="flex items-center space-x-3">
                 {getStepIcon('hskUploaded', application.verificationSteps.hskUploaded)}
                 <div>
-                  <h3 className="font-medium">HSK Certificate (Optional)</h3>
-                  <p className="text-sm text-gray-600">Upload your Chinese proficiency certificate</p>
+                  <h3 className="font-medium">Sertifikat HSK (Opsional)</h3>
+                  <p className="text-sm text-gray-600">Upload sertifikat kemampuan bahasa Mandarin Anda</p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
                 <Badge variant={application.verificationSteps.hskUploaded ? "default" : "outline"}>
-                  15 points
+                  15 poin
                 </Badge>
                 {!application.verificationSteps.hskUploaded && (
                   <Button
@@ -430,13 +430,13 @@ export default function TranslatorSignup() {
               <div className="flex items-center space-x-3">
                 {getStepIcon('introVideoUploaded', application.verificationSteps.introVideoUploaded)}
                 <div>
-                  <h3 className="font-medium">Introduction Video</h3>
-                  <p className="text-sm text-gray-600">Record yourself speaking in Indonesian and Mandarin</p>
+                  <h3 className="font-medium">Video Perkenalan</h3>
+                  <p className="text-sm text-gray-600">Rekam diri Anda berbicara dalam bahasa Indonesia dan Mandarin</p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
                 <Badge variant={application.verificationSteps.introVideoUploaded ? "default" : "outline"}>
-                  20 points
+                  20 poin
                 </Badge>
                 {!application.verificationSteps.introVideoUploaded && (
                   <Button
@@ -463,12 +463,12 @@ export default function TranslatorSignup() {
               <div className="flex items-center space-x-3">
                 {getStepIcon('adminApproved', application.verificationSteps.adminApproved)}
                 <div>
-                  <h3 className="font-medium">Admin Review</h3>
-                  <p className="text-sm text-gray-600">Waiting for admin approval</p>
+                  <h3 className="font-medium">Review Admin</h3>
+                  <p className="text-sm text-gray-600">Menunggu persetujuan admin</p>
                 </div>
               </div>
               <Badge variant={application.verificationSteps.adminApproved ? "default" : "outline"}>
-                15 points
+                15 poin
               </Badge>
             </div>
 
@@ -477,7 +477,7 @@ export default function TranslatorSignup() {
                 <div className="flex items-center space-x-2">
                   <CheckCircle className="h-5 w-5 text-green-500" />
                   <p className="text-green-800 font-medium">
-                    Great job! Your profile is nearly complete and ready for review.
+                    Bagus! Profil Anda hampir lengkap dan siap untuk direview.
                   </p>
                 </div>
               </div>

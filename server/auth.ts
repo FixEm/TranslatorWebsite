@@ -71,7 +71,7 @@ export async function createUserAndSendVerification(email: string, name: string,
   try {
     // Check if it's a student email
     if (!isStudentEmail(email)) {
-      throw new Error("Please use your student email (@student.ac.id or @edu.cn) for verification.");
+      throw new Error("Silakan gunakan email mahasiswa Anda (@student.ac.id atau @edu.cn) untuk verifikasi.");
     }
 
     // Generate a secure password for the user
@@ -144,7 +144,7 @@ export async function createUserAndSendVerification(email: string, name: string,
         };
       } catch (adminError) {
         console.error('Error handling existing user:', adminError);
-        throw new Error('Failed to send verification email');
+        throw new Error('Gagal mengirim email verifikasi');
       }
     }
     
@@ -163,7 +163,7 @@ export async function verifyEmailToken(token: string, applicationId: string): Pr
       .get();
     
     if (snapshot.empty) {
-      return { success: false, message: 'Invalid verification token' };
+      return { success: false, message: 'Token verifikasi tidak valid' };
     }
     
     const doc = snapshot.docs[0];
@@ -171,12 +171,12 @@ export async function verifyEmailToken(token: string, applicationId: string): Pr
     
     // Check if token has expired
     if (data.expiresAt.toDate() < new Date()) {
-      return { success: false, message: 'Verification token has expired' };
+      return { success: false, message: 'Token verifikasi telah kedaluwarsa' };
     }
     
     // Check if already verified
     if (data.verified) {
-      return { success: false, message: 'Email already verified' };
+      return { success: false, message: 'Email sudah diverifikasi' };
     }
     
     // Mark as verified
@@ -185,11 +185,11 @@ export async function verifyEmailToken(token: string, applicationId: string): Pr
     return { 
       success: true, 
       uid: doc.id,
-      message: 'Email verified successfully' 
+      message: 'Email berhasil diverifikasi' 
     };
   } catch (error) {
     console.error('Error verifying email token:', error);
-    return { success: false, message: 'Failed to verify email' };
+    return { success: false, message: 'Gagal memverifikasi email' };
   }
 }
 

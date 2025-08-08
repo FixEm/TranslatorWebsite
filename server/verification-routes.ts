@@ -1,6 +1,6 @@
 import express from 'express';
 import { storage } from './firebase-storage';
-import { auth, isIndonesianStudentEmail, isChineseUniversityEmail, isStudentEmail, getUserByEmail, createUserAndSendVerification, isEmailVerified, markEmailAsVerified, verifyEmailToken } from './auth';
+import { auth, db, isIndonesianStudentEmail, isChineseUniversityEmail, isStudentEmail, getUserByEmail, createUserAndSendVerification, isEmailVerified, markEmailAsVerified, verifyEmailToken } from './auth';
 import multer from 'multer';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
@@ -75,13 +75,13 @@ router.post('/applications/translator', async (req, res) => {
     
     // Validate required fields
     if (!applicationData.name || !applicationData.email || !applicationData.intent) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return res.status(400).json({ error: 'Data yang diperlukan tidak lengkap' });
     }
     
     // Check if email is already registered
     const existingProviders = await storage.getServiceProviders({ email: applicationData.email });
     if (existingProviders.length > 0) {
-      return res.status(400).json({ error: 'Email already registered' });
+      return res.status(400).json({ error: 'Email sudah terdaftar' });
     }
     
     // Create application first
@@ -98,23 +98,23 @@ router.post('/applications/translator', async (req, res) => {
       // Update application with Firebase UID
       await storage.updateApplicationEmailVerification(application.id, uid);
       
-      console.log(`📧 Firebase verification email ${emailSent ? 'sent' : 'attempted'} to ${applicationData.email}`);
+      console.log(`📧 Email verifikasi Firebase ${emailSent ? 'terkirim' : 'dicoba kirim'} ke ${applicationData.email}`);
       
       res.json({
         ...application,
         emailVerificationSent: emailSent,
-        message: emailSent ? 'Please check your email to verify your account' : 'Account created successfully'
+        message: emailSent ? 'Silakan cek email Anda untuk verifikasi akun' : 'Akun berhasil dibuat'
       });
     } catch (userError: any) {
-      console.error('Failed to create Firebase user or send verification:', userError);
+      console.error('Gagal membuat pengguna Firebase atau mengirim verifikasi:', userError);
       res.status(400).json({ 
-        error: userError.message || 'Failed to send verification email',
+        error: userError.message || 'Gagal mengirim email verifikasi',
         application: application
       });
     }
   } catch (error) {
     console.error('Error creating translator application:', error);
-    res.status(500).json({ error: 'Failed to create application' });
+    res.status(500).json({ error: 'Gagal membuat aplikasi' });
   }
 });
 
@@ -128,7 +128,7 @@ router.get('/verify-email', async (req, res) => {
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Verification Failed</title>
+          <title>Verifikasi Gagal</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f8fafc; }
             .container { max-width: 500px; margin: 0 auto; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
@@ -137,8 +137,8 @@ router.get('/verify-email', async (req, res) => {
         </head>
         <body>
           <div class="container">
-            <h1 class="error">❌ Verification Failed</h1>
-            <p>Invalid verification link. Token or Application ID is missing.</p>
+            <h1 class="error">❌ Verifikasi Gagal</h1>
+            <p>Link verifikasi tidak valid. Token atau ID Aplikasi tidak ditemukan.</p>
           </div>
         </body>
         </html>
@@ -153,7 +153,7 @@ router.get('/verify-email', async (req, res) => {
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Verification Failed</title>
+          <title>Verifikasi Gagal</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f8fafc; }
             .container { max-width: 500px; margin: 0 auto; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
@@ -163,22 +163,25 @@ router.get('/verify-email', async (req, res) => {
         <body>
           <div class="container">
             <h1 class="error">❌ ${result.message}</h1>
-            <p>Please try requesting a new verification email.</p>
+            <p>Silakan coba minta email verifikasi baru.</p>
           </div>
         </body>
         </html>
       `);
     }
     
-    // Update application verification status
-    await storage.updateApplicationEmailVerification(applicationId as string);
+    // Update application verification status (this should match the Firebase UID)
+    if (result.uid) {
+      await storage.updateApplicationEmailVerification(applicationId as string, result.uid);
+      console.log(`✅ Application ${applicationId} updated with verified Firebase UID: ${result.uid}`);
+    }
     
     // Return success page
     res.send(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Email Verified Successfully</title>
+        <title>Email Berhasil Diverifikasi</title>
         <style>
           body { 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
@@ -217,13 +220,13 @@ router.get('/verify-email', async (req, res) => {
       <body>
         <div class="container">
           <div class="celebration">🎉</div>
-          <h1 class="success">✅ Email Verified Successfully!</h1>
+          <h1 class="success">✅ Email Berhasil Diverifikasi!</h1>
           <p class="message">
-            Congratulations! Your student email has been verified. 
-            You can now continue with the registration process by uploading your documents and introduction video.
+            Selamat! Email mahasiswa Anda telah berhasil diverifikasi. 
+            Sekarang Anda dapat melanjutkan proses pendaftaran dengan mengunggah dokumen dan video perkenalan Anda.
           </p>
           <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/translator/signup?step=2&applicationId=${applicationId}" class="button">
-            Continue Registration
+            Lanjutkan Pendaftaran
           </a>
         </div>
       </body>
@@ -235,7 +238,7 @@ router.get('/verify-email', async (req, res) => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Verification Error</title>
+        <title>Error Verifikasi</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f8fafc; }
           .container { max-width: 500px; margin: 0 auto; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
@@ -244,8 +247,8 @@ router.get('/verify-email', async (req, res) => {
       </head>
       <body>
         <div class="container">
-          <h1 class="error">❌ Verification Error</h1>
-          <p>An error occurred while processing your email verification.</p>
+          <h1 class="error">❌ Error Verifikasi</h1>
+          <p>Terjadi kesalahan saat memproses verifikasi email Anda.</p>
         </div>
       </body>
       </html>
@@ -263,7 +266,7 @@ router.get('/verify-success', async (req, res) => {
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Verification Failed</title>
+          <title>Verifikasi Gagal</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f8fafc; }
             .container { max-width: 500px; margin: 0 auto; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
@@ -272,8 +275,8 @@ router.get('/verify-success', async (req, res) => {
         </head>
         <body>
           <div class="container">
-            <h1 class="error">❌ Verification Failed</h1>
-            <p>Application ID not found.</p>
+            <h1 class="error">❌ Verifikasi Gagal</h1>
+            <p>ID Aplikasi tidak ditemukan.</p>
           </div>
         </body>
         </html>
@@ -305,7 +308,7 @@ router.get('/verify-success', async (req, res) => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Email Verified Successfully</title>
+        <title>Email Berhasil Diverifikasi</title>
         <style>
           body { 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
@@ -344,13 +347,13 @@ router.get('/verify-success', async (req, res) => {
       <body>
         <div class="container">
           <div class="celebration">🎉</div>
-          <h1 class="success">✅ Email Verified Successfully!</h1>
+          <h1 class="success">✅ Email Berhasil Diverifikasi!</h1>
           <p class="message">
-            Congratulations! Your student email has been verified using Firebase Authentication. 
-            You can now continue with the registration process by uploading your documents and introduction video.
+            Selamat! Email mahasiswa Anda telah berhasil diverifikasi menggunakan Firebase Authentication. 
+            Sekarang Anda dapat melanjutkan proses pendaftaran dengan mengunggah dokumen dan video perkenalan Anda.
           </p>
           <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/translator/signup?step=2&applicationId=${applicationId}" class="button">
-            Continue Registration
+            Lanjutkan Pendaftaran
           </a>
         </div>
       </body>
@@ -362,7 +365,7 @@ router.get('/verify-success', async (req, res) => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Verification Error</title>
+        <title>Error Verifikasi</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f8fafc; }
           .container { max-width: 500px; margin: 0 auto; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
@@ -371,8 +374,8 @@ router.get('/verify-success', async (req, res) => {
       </head>
       <body>
         <div class="container">
-          <h1 class="error">❌ Verification Error</h1>
-          <p>An error occurred while processing your email verification.</p>
+          <h1 class="error">❌ Error Verifikasi</h1>
+          <p>Terjadi kesalahan saat memproses verifikasi email Anda.</p>
         </div>
       </body>
       </html>
@@ -387,7 +390,7 @@ router.post('/applications/:id/resend-verification', async (req, res) => {
     const application = await storage.getApplication(id);
     
     if (!application) {
-      return res.status(404).json({ error: 'Application not found' });
+      return res.status(404).json({ error: 'Aplikasi tidak ditemukan' });
     }
     
     // Type assertion to access firebaseUid
@@ -395,7 +398,7 @@ router.post('/applications/:id/resend-verification', async (req, res) => {
     
     // Check if already verified
     if (firebaseApp.firebaseUid && await isEmailVerified(firebaseApp.firebaseUid)) {
-      return res.status(400).json({ error: 'Email already verified' });
+      return res.status(400).json({ error: 'Email sudah diverifikasi' });
     }
     
     // Resend verification email
@@ -412,17 +415,17 @@ router.post('/applications/:id/resend-verification', async (req, res) => {
       }
       
       if (emailSent) {
-        res.json({ success: true, message: 'Verification email sent successfully' });
+        res.json({ success: true, message: 'Email verifikasi berhasil dikirim' });
       } else {
-        res.status(500).json({ error: 'Failed to send verification email' });
+        res.status(500).json({ error: 'Gagal mengirim email verifikasi' });
       }
     } catch (error: any) {
       console.error('Error resending verification email:', error);
-      res.status(500).json({ error: error.message || 'Failed to send verification email' });
+      res.status(500).json({ error: error.message || 'Gagal mengirim email verifikasi' });
     }
   } catch (error) {
     console.error('Error resending verification email:', error);
-    res.status(500).json({ error: 'Failed to resend verification email' });
+    res.status(500).json({ error: 'Gagal mengirim ulang email verifikasi' });
   }
 });
 
@@ -433,7 +436,7 @@ router.post('/applications/:id/upload/student-id', upload.single('studentId'), a
     const file = req.file;
     
     if (!file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return res.status(400).json({ error: 'Tidak ada file yang diunggah' });
     }
     
     // Upload to Firebase Storage
@@ -448,12 +451,12 @@ router.post('/applications/:id/upload/student-id', upload.single('studentId'), a
     
     res.json({
       success: true,
-      message: 'Student ID document uploaded successfully',
+      message: 'Dokumen kartu mahasiswa berhasil diunggah',
       documentUrl: downloadURL
     });
   } catch (error) {
     console.error('Error uploading student ID:', error);
-    res.status(500).json({ error: 'Failed to upload document' });
+    res.status(500).json({ error: 'Gagal mengunggah dokumen' });
   }
 });
 
@@ -464,7 +467,7 @@ router.post('/applications/:id/upload/hsk', upload.single('hskCertificate'), asy
     const file = req.file;
     
     if (!file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return res.status(400).json({ error: 'Tidak ada file yang diunggah' });
     }
     
     const fileName = `hsk-certificates/${id}-${Date.now()}-${file.originalname}`;
@@ -477,12 +480,12 @@ router.post('/applications/:id/upload/hsk', upload.single('hskCertificate'), asy
     
     res.json({
       success: true,
-      message: 'HSK certificate uploaded successfully',
+      message: 'Sertifikat HSK berhasil diunggah',
       certificateUrl: downloadURL
     });
   } catch (error) {
     console.error('Error uploading HSK certificate:', error);
-    res.status(500).json({ error: 'Failed to upload certificate' });
+    res.status(500).json({ error: 'Gagal mengunggah sertifikat' });
   }
 });
 
@@ -493,12 +496,12 @@ router.post('/applications/:id/upload/intro-video', upload.single('introVideo'),
     const file = req.file;
     
     if (!file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return res.status(400).json({ error: 'Tidak ada file yang diunggah' });
     }
     
     // Validate file type (video)
     if (!file.mimetype.startsWith('video/')) {
-      return res.status(400).json({ error: 'File must be a video' });
+      return res.status(400).json({ error: 'File harus berupa video' });
     }
     
     const fileName = `intro-videos/${id}-${Date.now()}-${file.originalname}`;
@@ -511,12 +514,12 @@ router.post('/applications/:id/upload/intro-video', upload.single('introVideo'),
     
     res.json({
       success: true,
-      message: 'Intro video uploaded successfully',
+      message: 'Video perkenalan berhasil diunggah',
       videoUrl: downloadURL
     });
   } catch (error) {
     console.error('Error uploading intro video:', error);
-    res.status(500).json({ error: 'Failed to upload video' });
+    res.status(500).json({ error: 'Gagal mengunggah video' });
   }
 });
 
@@ -532,7 +535,7 @@ router.post('/applications/:id/verify-email', async (req, res) => {
     });
   } catch (error) {
     console.error('Error verifying email:', error);
-    res.status(500).json({ error: 'Failed to verify email' });
+    res.status(500).json({ error: 'Gagal memverifikasi email' });
   }
 });
 
@@ -543,13 +546,13 @@ router.get('/applications/:id/status', async (req, res) => {
     const application = await storage.getApplication(id);
     
     if (!application) {
-      return res.status(404).json({ error: 'Application not found' });
+      return res.status(404).json({ error: 'Aplikasi tidak ditemukan' });
     }
     
     res.json(application);
   } catch (error) {
     console.error('Error getting application status:', error);
-    res.status(500).json({ error: 'Failed to get application status' });
+    res.status(500).json({ error: 'Gagal mendapatkan status aplikasi' });
   }
 });
 
@@ -560,7 +563,7 @@ router.get('/admin/applications/pending', async (req, res) => {
     res.json(applications);
   } catch (error) {
     console.error('Error getting pending applications:', error);
-    res.status(500).json({ error: 'Failed to get applications' });
+    res.status(500).json({ error: 'Gagal mendapatkan aplikasi' });
   }
 });
 
@@ -574,11 +577,11 @@ router.post('/admin/applications/:id/approve', async (req, res) => {
     
     res.json({
       success: true,
-      message: 'Application approved successfully'
+      message: 'Aplikasi berhasil disetujui'
     });
   } catch (error) {
     console.error('Error approving application:', error);
-    res.status(500).json({ error: 'Failed to approve application' });
+    res.status(500).json({ error: 'Gagal menyetujui aplikasi' });
   }
 });
 
@@ -592,11 +595,122 @@ router.post('/admin/applications/:id/reject', async (req, res) => {
     
     res.json({
       success: true,
-      message: 'Application rejected'
+      message: 'Aplikasi ditolak'
     });
   } catch (error) {
     console.error('Error rejecting application:', error);
-    res.status(500).json({ error: 'Failed to reject application' });
+    res.status(500).json({ error: 'Gagal menolak aplikasi' });
+  }
+});
+
+// Manual email verification for testing/debugging - ONLY FOR STUDENTS
+router.post('/debug/verify-email/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    
+    // Check if email is a student email FIRST
+    if (!isStudentEmail(email)) {
+      return res.status(403).json({ 
+        error: 'Verifikasi manual hanya diperbolehkan untuk email mahasiswa (@student.ac.id atau @edu.cn)',
+        emailType: 'bukan_mahasiswa',
+        providedEmail: email
+      });
+    }
+    
+    // Get user from Firebase
+    const userRecord = await auth.getUserByEmail(email);
+    console.log(`🔍 Before verification - User: ${userRecord.uid}, emailVerified: ${userRecord.emailVerified}`);
+    
+    if (userRecord.emailVerified) {
+      return res.json({ 
+        message: 'Email sudah diverifikasi',
+        user: {
+          uid: userRecord.uid,
+          email: userRecord.email,
+          emailVerified: userRecord.emailVerified
+        }
+      });
+    }
+    
+    // Manually mark as verified with detailed logging
+    console.log(`🔧 Starting manual verification for UID: ${userRecord.uid}`);
+    
+    try {
+      // Direct Firebase Auth update
+      await auth.updateUser(userRecord.uid, {
+        emailVerified: true
+      });
+      console.log(`✅ Firebase Auth emailVerified updated for ${userRecord.uid}`);
+      
+      // Update Firestore verification record
+      await db.collection('email_verifications').doc(userRecord.uid).update({
+        verified: true,
+        verifiedAt: new Date()
+      });
+      console.log(`✅ Firestore verification record updated for ${userRecord.uid}`);
+      
+    } catch (updateError) {
+      console.error('❌ Error during verification update:', updateError);
+      throw updateError;
+    }
+    
+    // Get updated user record
+    const updatedUser = await auth.getUserByEmail(email);
+    console.log(`🔍 After verification - User: ${updatedUser.uid}, emailVerified: ${updatedUser.emailVerified}`);
+    
+    res.json({ 
+      message: 'Verifikasi email berhasil diperbarui secara manual',
+      before: {
+        emailVerified: userRecord.emailVerified
+      },
+      after: {
+        uid: updatedUser.uid,
+        email: updatedUser.email,
+        emailVerified: updatedUser.emailVerified
+      },
+      debug: {
+        uid: userRecord.uid,
+        updateSuccessful: updatedUser.emailVerified
+      }
+    });
+  } catch (error: any) {
+    console.error('Manual verification error:', error);
+    res.status(404).json({ 
+      error: error.code === 'auth/user-not-found' ? 'Pengguna tidak ditemukan' : error.message,
+      details: error.message
+    });
+  }
+});
+
+// Debug endpoint to check Firebase user status
+router.get('/debug/user/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    
+    // Get user from Firebase
+    const userRecord = await auth.getUserByEmail(email);
+    
+    // Get verification record from Firestore
+    const verificationDoc = await db.collection('email_verifications').doc(userRecord.uid).get();
+    const verificationData = verificationDoc.exists ? verificationDoc.data() : null;
+    
+    res.json({
+      firebase: {
+        uid: userRecord.uid,
+        email: userRecord.email,
+        emailVerified: userRecord.emailVerified,
+        displayName: userRecord.displayName,
+        creationTime: userRecord.metadata.creationTime,
+        lastSignInTime: userRecord.metadata.lastSignInTime
+      },
+      verification: verificationData,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    console.error('Debug error:', error);
+    res.status(404).json({ 
+      error: error.code === 'auth/user-not-found' ? 'Pengguna tidak ditemukan' : error.message 
+    });
   }
 });
 
