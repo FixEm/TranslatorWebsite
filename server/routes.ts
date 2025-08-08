@@ -1,9 +1,12 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { FirebaseStorage } from "./firebase-storage";
 import { insertApplicationSchema, insertContactSchema } from "@shared/schema";
 import multer from "multer";
 import path from "path";
+
+// Create Firebase storage instance
+const storage = new FirebaseStorage();
 
 const upload = multer({
   dest: 'uploads/',
@@ -27,6 +30,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all service providers with optional filters
   app.get("/api/service-providers", async (req, res) => {
     try {
+      console.log("📡 API called: /api/service-providers");
       const { city, services, minRating } = req.query;
       
       const filters: any = {};
@@ -34,9 +38,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (services) filters.services = (services as string).split(',');
       if (minRating) filters.minRating = parseFloat(minRating as string);
       
+      console.log("🔍 Filters:", filters);
       const providers = await storage.getServiceProviders(filters);
+      console.log("🔥 Firebase returned providers:", providers.length);
       res.json(providers);
     } catch (error) {
+      console.error("❌ Error fetching providers:", error);
       res.status(500).json({ message: "Failed to fetch service providers" });
     }
   });
@@ -122,14 +129,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: application.email,
           whatsapp: application.whatsapp,
           city: application.city,
-          services: application.services,
+          services: Array.isArray(application.services) ? application.services : [],
           experience: application.experience,
           pricePerDay: application.pricePerDay,
           description: application.description,
           languages: [], // Default empty, can be updated later
           profileImage: application.profileImage,
           identityDocument: application.identityDocument,
-          certificates: application.certificates,
+          certificates: Array.isArray(application.certificates) ? application.certificates : [],
         };
         
         await storage.createServiceProvider(providerData);

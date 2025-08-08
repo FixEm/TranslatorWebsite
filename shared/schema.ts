@@ -3,6 +3,61 @@ import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb } f
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Firebase-compatible types (for when not using Drizzle)
+export interface FirebaseServiceProvider {
+  id: string;
+  name: string;
+  email: string;
+  whatsapp: string;
+  city: string;
+  services: string[]; // Firebase stores as array
+  experience: string;
+  pricePerDay: string;
+  description: string;
+  languages: Array<{ language: string; level: string }>; // Firebase stores as array
+  profileImage: string | null;
+  identityDocument: string | null;
+  certificates: string[] | null; // Firebase stores as array
+  isVerified: boolean;
+  rating: string;
+  reviewCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface FirebaseApplication {
+  id: string;
+  name: string;
+  email: string;
+  whatsapp: string;
+  city: string;
+  services: string[]; // Firebase stores as array
+  experience: string;
+  pricePerDay: string;
+  description: string;
+  profileImage: string | null;
+  identityDocument: string | null;
+  certificates: string[] | null; // Firebase stores as array
+  status: string;
+  createdAt: Date;
+}
+
+export interface FirebaseContact {
+  id: string;
+  clientName: string;
+  clientEmail: string;
+  clientPhone: string | null;
+  serviceProviderId: string;
+  message: string;
+  createdAt: Date;
+}
+
+export interface FirebaseUser {
+  id: string;
+  username: string;
+  password: string;
+}
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -83,10 +138,10 @@ export const insertUserSchema = createInsertSchema(users).pick({
 });
 
 export type InsertServiceProvider = z.infer<typeof insertServiceProviderSchema>;
-export type ServiceProvider = typeof serviceProviders.$inferSelect;
+export type ServiceProvider = typeof serviceProviders.$inferSelect | FirebaseServiceProvider;
 export type InsertApplication = z.infer<typeof insertApplicationSchema>;
-export type Application = typeof applications.$inferSelect;
+export type Application = typeof applications.$inferSelect | FirebaseApplication;
 export type InsertContact = z.infer<typeof insertContactSchema>;
-export type Contact = typeof contacts.$inferSelect;
+export type Contact = typeof contacts.$inferSelect | FirebaseContact;
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export type User = typeof users.$inferSelect | FirebaseUser;
