@@ -70,7 +70,7 @@ export default function Home() {
                   Cari Penerjemah Sekarang
                 </Button>
               </Link>
-              <Link href="/register">
+              <Link href="/translator/signup">
                 <Button variant="outline" size="lg" className="border-2 border-white/80 text-slate-900 hover:bg-white hover:text-slate-900 hover:border-white px-10 py-5 text-lg font-semibold rounded-xl shadow-elegant hover:shadow-luxury transition-all duration-300 transform hover:scale-105 backdrop-blur-sm">
                   Bergabung Sebagai Penerjemah
                 </Button>

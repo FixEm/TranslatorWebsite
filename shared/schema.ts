@@ -45,6 +45,7 @@ export interface FirebaseApplication {
   id: string;
   name: string;
   email: string;
+  password?: string; // Added for registration
   whatsapp: string;
   city: string;
   services: string[]; // Firebase stores as array
@@ -147,6 +148,7 @@ export const applications = pgTable("applications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   email: text("email").notNull(),
+  password: text("password"), // Added for registration
   whatsapp: text("whatsapp").notNull(),
   city: text("city").notNull(),
   services: jsonb("services").notNull(),
@@ -211,10 +213,15 @@ export const insertApplicationSchema = createInsertSchema(applications).omit({
   completenessScore: true,
   adminNotes: true,
 }).extend({
+  password: z.string().min(6, "Password minimal 6 karakter"),
+  confirmPassword: z.string().min(6, "Konfirmasi password minimal 6 karakter"),
   intent: z.enum(['translator', 'tour_guide', 'both']).default('translator'),
   yearsInChina: z.number().optional(),
   googleId: z.string().optional(),
   studentEmail: z.string().optional(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Password dan konfirmasi password tidak sama",
+  path: ["confirmPassword"],
 });
 
 export const insertContactSchema = createInsertSchema(contacts).omit({

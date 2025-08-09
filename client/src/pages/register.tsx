@@ -13,14 +13,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { insertApplicationSchema } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
-import { UserPlus } from "lucide-react";
+import { UserPlus, Eye, EyeOff } from "lucide-react";
 import { z } from "zod";
 
-const formSchema = insertApplicationSchema.extend({
+const formSchema = z.object({
+  name: z.string().min(1, "Nama wajib diisi"),
+  email: z.string().email("Format email tidak valid"),
+  password: z.string().min(6, "Password minimal 6 karakter"),
+  confirmPassword: z.string().min(6, "Konfirmasi password minimal 6 karakter"),
+  whatsapp: z.string().min(1, "Nomor WhatsApp wajib diisi"),
+  city: z.string().min(1, "Kota wajib dipilih"),
   services: z.array(z.string()).min(1, "Pilih minimal satu layanan"),
+  experience: z.string().min(1, "Pengalaman wajib dipilih"),
+  pricePerDay: z.string().min(1, "Tarif per hari wajib diisi"),
+  description: z.string().min(10, "Deskripsi minimal 10 karakter"),
   termsAccepted: z.boolean().refine(val => val === true, "Anda harus menyetujui syarat dan ketentuan"),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Password dan konfirmasi password tidak sama",
+  path: ["confirmPassword"],
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -29,6 +40,8 @@ export default function RegisterPage() {
   const [profileImageFiles, setProfileImageFiles] = useState<File[]>([]);
   const [identityFiles, setIdentityFiles] = useState<File[]>([]);
   const [certificateFiles, setCertificateFiles] = useState<File[]>([]);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -37,6 +50,8 @@ export default function RegisterPage() {
     defaultValues: {
       name: "",
       email: "",
+      password: "",
+      confirmPassword: "",
       whatsapp: "",
       city: "",
       services: [],
@@ -125,7 +140,7 @@ export default function RegisterPage() {
     if (checked) {
       form.setValue('services', [...currentServices, serviceId]);
     } else {
-      form.setValue('services', currentServices.filter(s => s !== serviceId));
+      form.setValue('services', currentServices.filter((s: string) => s !== serviceId));
     }
   };
 
@@ -177,6 +192,70 @@ export default function RegisterPage() {
                           <FormLabel>Email *</FormLabel>
                           <FormControl>
                             <Input type="email" placeholder="nama@email.com" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Password *</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Input
+                                type={showPassword ? "text" : "password"}
+                                placeholder="Masukkan password"
+                                {...field}
+                                className="pr-10"
+                              />
+                              <button
+                                type="button"
+                                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                                onClick={() => setShowPassword(!showPassword)}
+                              >
+                                {showPassword ? (
+                                  <EyeOff className="h-4 w-4 text-gray-400" />
+                                ) : (
+                                  <Eye className="h-4 w-4 text-gray-400" />
+                                )}
+                              </button>
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Konfirmasi Password *</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Input
+                                type={showConfirmPassword ? "text" : "password"}
+                                placeholder="Konfirmasi password"
+                                {...field}
+                                className="pr-10"
+                              />
+                              <button
+                                type="button"
+                                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              >
+                                {showConfirmPassword ? (
+                                  <EyeOff className="h-4 w-4 text-gray-400" />
+                                ) : (
+                                  <Eye className="h-4 w-4 text-gray-400" />
+                                )}
+                              </button>
+                            </div>
                           </FormControl>
                           <FormMessage />
                         </FormItem>
