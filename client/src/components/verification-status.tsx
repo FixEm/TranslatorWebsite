@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/auth-context";
 import { 
   CheckCircle, 
   Clock, 
@@ -11,7 +12,6 @@ import {
   Mail, 
   Upload, 
   FileText, 
-  Video, 
   Star 
 } from "lucide-react";
 
@@ -19,7 +19,6 @@ interface VerificationStep {
   emailVerified: boolean;
   studentIdUploaded: boolean;
   hskUploaded: boolean;
-  introVideoUploaded: boolean;
   adminApproved: boolean;
 }
 
@@ -31,48 +30,142 @@ interface VerificationStatusProps {
 
 export default function VerificationStatus({ userId, applicationData, onUpdate }: VerificationStatusProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [verificationSteps, setVerificationSteps] = useState<VerificationStep>({
     emailVerified: false,
     studentIdUploaded: false,
     hskUploaded: false,
-    introVideoUploaded: false,
     adminApproved: false,
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  // Calculate completeness score
-  const completenessScore = Object.entries(verificationSteps).reduce((score, [key, value]) => {
-    const points = {
-      emailVerified: 30,
-      studentIdUploaded: 20,
-      hskUploaded: 15,
-      introVideoUploaded: 20,
-      adminApproved: 15
-    };
-    return score + (value ? points[key as keyof typeof points] : 0);
-  }, 0);
+  // Calculate completeness score with safe handling
+  const completenessScore = (() => {
+    try {
+      const points = {
+        emailVerified: 30,
+        studentIdUploaded: 25,
+        hskUploaded: 20,
+        adminApproved: 25
+      };
+      
+      // Ensure verificationSteps is a valid object
+      const steps = verificationSteps || {
+        emailVerified: false,
+        studentIdUploaded: false,
+        hskUploaded: false,
+        adminApproved: false,
+      };
+      
+      const score = Object.entries(steps).reduce((acc, [key, value]) => {
+        const stepPoints = points[key as keyof typeof points];
+        if (typeof stepPoints === 'number' && typeof value === 'boolean' && value) {
+          return acc + stepPoints;
+        }
+        return acc;
+      }, 0);
+      
+      // Ensure we return a valid number
+      return isNaN(score) ? 0 : Math.max(0, Math.min(100, score));
+    } catch (error) {
+      console.error('Error calculating completeness score:', error);
+      return 0;
+    }
+  })();
 
   useEffect(() => {
+    console.log('🔍 VerificationStatus: Processing applicationData:', applicationData);
+    
     if (applicationData?.verificationSteps) {
-      setVerificationSteps(applicationData.verificationSteps);
+      console.log('🔍 VerificationStatus: Found verificationSteps:', applicationData.verificationSteps);
+      
+      const steps = {
+        emailVerified: Boolean(user?.emailVerified ?? applicationData.verificationSteps.emailVerified),
+        studentIdUploaded: Boolean(applicationData.verificationSteps.studentIdUploaded),
+        hskUploaded: Boolean(applicationData.verificationSteps.hskUploaded),
+        adminApproved: Boolean(applicationData.verificationSteps.adminApproved),
+      };
+      
+      console.log('🔍 VerificationStatus: Setting steps:', steps);
+      setVerificationSteps(steps);
+    } else if (user) {
+      console.log('🔍 VerificationStatus: No verificationSteps in applicationData, using user data:', user);
+      // If no application data, at least set email verification from auth context
+      setVerificationSteps(prev => ({
+        ...prev,
+        emailVerified: Boolean(user.emailVerified)
+      }));
+    } else {
+      console.log('🔍 VerificationStatus: No applicationData or user, using defaults');
     }
-  }, [applicationData]);
+  }, [applicationData, user]);
+
+  // Periodically check email verification status
+  useEffect(() => {
+    if (!user?.emailVerified && user?.email) {
+      const checkEmailVerification = async () => {
+        try {
+          const response = await fetch(`/api/auth/verify-status?email=${user.email}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.emailVerified && !verificationSteps.emailVerified) {
+              // Email has been verified, update the state
+              setVerificationSteps(prev => ({
+                ...prev,
+                emailVerified: true
+              }));
+              
+              toast({
+                title: "Email Terverifikasi!",
+                description: "Email Anda telah berhasil diverifikasi.",
+              });
+
+              // Force a refresh of the user session to update auth context
+              window.location.reload();
+            }
+          }
+        } catch (error) {
+          console.error('Error checking email verification:', error);
+        }
+      };
+
+      // Check immediately and then every 10 seconds
+      checkEmailVerification();
+      const interval = setInterval(checkEmailVerification, 10000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [user?.emailVerified, user?.email, verificationSteps.emailVerified, toast]);
 
   const handleFileUpload = async (type: string, file: File) => {
+    if (!applicationData?.id) {
+      toast({
+        title: "Error",
+        description: "Tidak dapat menemukan data aplikasi. Silakan refresh halaman atau logout dan login kembali.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', type);
-      formData.append('applicationId', applicationData?.id || '');
+      
+      // Use the correct field names based on the type
+      if (type === 'student-id') {
+        formData.append('studentId', file);
+      } else if (type === 'hsk') {
+        formData.append('hskCertificate', file);
+      }
 
-      const response = await fetch('/api/verification/upload', {
+      const response = await fetch(`/api/applications/${applicationData.id}/upload/${type}`, {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        throw new Error('Upload failed');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Upload failed');
       }
 
       const result = await response.json();
@@ -80,8 +173,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
       // Update verification status
       setVerificationSteps(prev => ({
         ...prev,
-        [type === 'student-id' ? 'studentIdUploaded' : 
-         type === 'hsk' ? 'hskUploaded' : 'introVideoUploaded']: true
+        [type === 'student-id' ? 'studentIdUploaded' : 'hskUploaded']: true
       }));
 
       toast({
@@ -146,8 +238,6 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
         return <Upload className="h-5 w-5 text-gray-400" />;
       case 'hskUploaded':
         return <FileText className="h-5 w-5 text-gray-400" />;
-      case 'introVideoUploaded':
-        return <Video className="h-5 w-5 text-gray-400" />;
       case 'adminApproved':
         return <Clock className="h-5 w-5 text-gray-400" />;
       default:
@@ -243,7 +333,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
             </div>
             <div className="flex items-center space-x-2">
               <Badge variant={verificationSteps.studentIdUploaded ? "default" : "outline"}>
-                20 poin
+                25 poin
               </Badge>
               {!verificationSteps.studentIdUploaded && (
                 <Button
@@ -277,7 +367,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
             </div>
             <div className="flex items-center space-x-2">
               <Badge variant={verificationSteps.hskUploaded ? "default" : "outline"}>
-                15 poin
+                20 poin
               </Badge>
               {!verificationSteps.hskUploaded && (
                 <Button
@@ -301,40 +391,6 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
             </div>
           </div>
 
-          {/* Intro Video */}
-          <div className="flex items-center justify-between p-4 border rounded-lg">
-            <div className="flex items-center space-x-3">
-              {getStepIcon('introVideoUploaded', verificationSteps.introVideoUploaded)}
-              <div>
-                <h3 className="font-medium">Video Perkenalan</h3>
-                <p className="text-sm text-gray-600">Rekam diri Anda berbicara dalam bahasa Indonesia dan Mandarin</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Badge variant={verificationSteps.introVideoUploaded ? "default" : "outline"}>
-                20 poin
-              </Badge>
-              {!verificationSteps.introVideoUploaded && (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = 'video/*';
-                    input.onchange = (e) => {
-                      const file = (e.target as HTMLInputElement).files?.[0];
-                      if (file) handleFileUpload('intro-video', file);
-                    };
-                    input.click();
-                  }}
-                  disabled={isLoading}
-                >
-                  <Video className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-
           {/* Admin Approval */}
           <div className="flex items-center justify-between p-4 border rounded-lg">
             <div className="flex items-center space-x-3">
@@ -345,7 +401,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
               </div>
             </div>
             <Badge variant={verificationSteps.adminApproved ? "default" : "outline"}>
-              15 poin
+              25 poin
             </Badge>
           </div>
 

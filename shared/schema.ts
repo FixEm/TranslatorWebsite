@@ -75,6 +75,7 @@ export interface FirebaseApplication {
   intent: 'translator' | 'tour_guide' | 'both';
   yearsInChina?: number;
   adminNotes?: string; // For admin review comments
+  questionnaireData?: any; // Role-specific questionnaire responses
 }
 
 export interface FirebaseContact {
@@ -177,6 +178,7 @@ export const applications = pgTable("applications", {
   intent: text("intent").notNull().default("translator"),
   yearsInChina: integer("years_in_china"),
   adminNotes: text("admin_notes"),
+  questionnaireData: jsonb("questionnaire_data"), // Role-specific questionnaire responses
 });
 
 export const contacts = pgTable("contacts", {
@@ -219,6 +221,7 @@ export const insertApplicationSchema = createInsertSchema(applications).omit({
   yearsInChina: z.number().optional(),
   googleId: z.string().optional(),
   studentEmail: z.string().optional(),
+  questionnaireData: z.any().optional(), // Allow any questionnaire structure
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Password dan konfirmasi password tidak sama",
   path: ["confirmPassword"],

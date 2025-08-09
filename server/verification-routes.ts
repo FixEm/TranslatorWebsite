@@ -2,7 +2,9 @@ import express from 'express';
 import { storage } from './firebase-storage';
 import { auth, db, isIndonesianStudentEmail, isChineseUniversityEmail, isStudentEmail, getUserByEmail, createUserAndSendVerification, isEmailVerified, markEmailAsVerified, verifyEmailToken } from './auth';
 import multer from 'multer';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage as firebaseStorage } from './firebase';
+// Import Firebase initialization to ensure it's initialized
+import './firebase';
 
 const router = express.Router();
 
@@ -439,12 +441,34 @@ router.post('/applications/:id/upload/student-id', upload.single('studentId'), a
       return res.status(400).json({ error: 'Tidak ada file yang diunggah' });
     }
     
-    // Upload to Firebase Storage
+    // Upload to Firebase Storage using Admin SDK
+    console.log('📄 Starting student ID upload for application:', id);
     const fileName = `student-ids/${id}-${Date.now()}-${file.originalname}`;
-    const storageRef = ref(getStorage(), fileName);
     
-    await uploadBytes(storageRef, file.buffer);
-    const downloadURL = await getDownloadURL(storageRef);
+    let downloadURL: string;
+    try {
+      const bucket = firebaseStorage.bucket();
+      console.log('✅ Firebase bucket acquired:', bucket.name);
+      
+      const fileRef = bucket.file(fileName);
+      
+      await fileRef.save(file.buffer, {
+        metadata: {
+          contentType: file.mimetype,
+        },
+      });
+      console.log('✅ File saved to storage');
+      
+      // Make the file publicly accessible
+      await fileRef.makePublic();
+      console.log('✅ File made public');
+      
+      downloadURL = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+      console.log('✅ Download URL generated:', downloadURL);
+    } catch (storageError) {
+      console.error('❌ Firebase Storage error:', storageError);
+      throw storageError;
+    }
     
     // Update application with student ID document
     await storage.updateStudentDocument(id, downloadURL);
@@ -470,11 +494,33 @@ router.post('/applications/:id/upload/hsk', upload.single('hskCertificate'), asy
       return res.status(400).json({ error: 'Tidak ada file yang diunggah' });
     }
     
+    console.log('📄 Starting HSK certificate upload for application:', id);
     const fileName = `hsk-certificates/${id}-${Date.now()}-${file.originalname}`;
-    const storageRef = ref(getStorage(), fileName);
     
-    await uploadBytes(storageRef, file.buffer);
-    const downloadURL = await getDownloadURL(storageRef);
+    let downloadURL: string;
+    try {
+      const bucket = firebaseStorage.bucket();
+      console.log('✅ Firebase bucket acquired:', bucket.name);
+      
+      const fileRef = bucket.file(fileName);
+      
+      await fileRef.save(file.buffer, {
+        metadata: {
+          contentType: file.mimetype,
+        },
+      });
+      console.log('✅ HSK certificate saved to storage');
+      
+      // Make the file publicly accessible
+      await fileRef.makePublic();
+      console.log('✅ HSK certificate made public');
+      
+      downloadURL = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+      console.log('✅ HSK certificate download URL generated:', downloadURL);
+    } catch (storageError) {
+      console.error('❌ Firebase Storage error for HSK:', storageError);
+      throw storageError;
+    }
     
     await storage.updateHskCertificate(id, downloadURL);
     
@@ -486,40 +532,6 @@ router.post('/applications/:id/upload/hsk', upload.single('hskCertificate'), asy
   } catch (error) {
     console.error('Error uploading HSK certificate:', error);
     res.status(500).json({ error: 'Gagal mengunggah sertifikat' });
-  }
-});
-
-// Upload intro video
-router.post('/applications/:id/upload/intro-video', upload.single('introVideo'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const file = req.file;
-    
-    if (!file) {
-      return res.status(400).json({ error: 'Tidak ada file yang diunggah' });
-    }
-    
-    // Validate file type (video)
-    if (!file.mimetype.startsWith('video/')) {
-      return res.status(400).json({ error: 'File harus berupa video' });
-    }
-    
-    const fileName = `intro-videos/${id}-${Date.now()}-${file.originalname}`;
-    const storageRef = ref(getStorage(), fileName);
-    
-    await uploadBytes(storageRef, file.buffer);
-    const downloadURL = await getDownloadURL(storageRef);
-    
-    await storage.updateIntroVideo(id, downloadURL);
-    
-    res.json({
-      success: true,
-      message: 'Video perkenalan berhasil diunggah',
-      videoUrl: downloadURL
-    });
-  } catch (error) {
-    console.error('Error uploading intro video:', error);
-    res.status(500).json({ error: 'Gagal mengunggah video' });
   }
 });
 

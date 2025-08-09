@@ -43,12 +43,12 @@ export default function LoginPage() {
       
       toast({
         title: "Login Berhasil!",
-        description: "Anda berhasil masuk ke akun Anda.",
+        description: "Anda berhasil masuk. Silakan lengkapi verifikasi akun Anda.",
       });
       
       // Redirect based on user role after successful login
       if (userData?.role === 'translator') {
-        setLocation('/translator/dashboard');
+        setLocation('/translator/dashboard?tab=verification');
       } else if (userData?.role === 'admin') {
         setLocation('/admin/dashboard');
       } else {

@@ -209,11 +209,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get translator application by email
+  app.get("/api/applications/translator", async (req, res) => {
+    try {
+      const { email } = req.query;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email parameter is required" });
+      }
+      
+      const applications = await storage.getApplications();
+      const application = applications.find(app => app.email === email);
+      
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      
+      res.json(application);
+    } catch (error) {
+      console.error('❌ Error fetching translator application:', error);
+      res.status(500).json({ message: "Failed to fetch application" });
+    }
+  });
+
   // Get applications (for admin)
   app.get("/api/applications", async (req, res) => {
     try {
       const { status } = req.query;
       const applications = await storage.getApplications(status as string);
+      console.log('🔍 Applications from Firebase:', JSON.stringify(applications, null, 2));
       res.json(applications);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch applications" });
@@ -223,43 +247,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update application status (approve/reject)
   app.patch("/api/applications/:id/status", async (req, res) => {
     try {
+      console.log("🔄 UPDATE APPLICATION STATUS:", { id: req.params.id, status: req.body.status });
       const { id } = req.params;
       const { status } = req.body;
       
-      if (!['approved', 'rejected'].includes(status)) {
+      if (!['approved', 'rejected', 'pending', 'needs_changes'].includes(status)) {
+        console.log("❌ Invalid status:", status);
         return res.status(400).json({ message: "Invalid status" });
       }
       
+      console.log("🔍 Updating application status...");
       const application = await storage.updateApplicationStatus(id, status);
       
       if (!application) {
+        console.log("❌ Application not found:", id);
         return res.status(404).json({ message: "Application not found" });
       }
       
-      // If approved, create service provider
+      console.log("✅ Application status updated:", application);
+      
+      // If approved, create service provider (only if not already created)
       if (status === 'approved') {
-        const providerData = {
-          name: application.name,
-          email: application.email,
-          whatsapp: application.whatsapp,
-          city: application.city,
-          services: Array.isArray(application.services) ? application.services : [],
-          experience: application.experience,
-          pricePerDay: application.pricePerDay,
-          description: application.description,
-          languages: [], // Default empty, can be updated later
-          profileImage: application.profileImage,
-          identityDocument: application.identityDocument,
-          certificates: Array.isArray(application.certificates) ? application.certificates : [],
-          intent: (application.intent || 'translator') as 'translator' | 'tour_guide' | 'both',
-        };
+        console.log("🎯 Creating service provider for approved application...");
         
-        await storage.createServiceProvider(providerData);
+        // Check if service provider already exists
+        const existingProviders = await storage.getServiceProviders({ email: application.email });
+        if (existingProviders.length === 0) {
+          const providerData = {
+            name: application.name,
+            email: application.email,
+            whatsapp: application.whatsapp,
+            city: application.city,
+            services: Array.isArray(application.services) ? application.services : [],
+            experience: application.experience,
+            pricePerDay: application.pricePerDay,
+            description: application.description,
+            languages: [], // Default empty, can be updated later
+            profileImage: application.profileImage,
+            identityDocument: application.identityDocument,
+            certificates: Array.isArray(application.certificates) ? application.certificates : [],
+            intent: (application.intent || 'translator') as 'translator' | 'tour_guide' | 'both',
+          };
+          
+          console.log("📝 Provider data:", providerData);
+          await storage.createServiceProvider(providerData);
+          console.log("✅ Service provider created successfully");
+        } else {
+          console.log("ℹ️ Service provider already exists, skipping creation");
+        }
       }
       
       res.json(application);
     } catch (error) {
-      res.status(500).json({ message: "Failed to update application status" });
+      console.error("❌ Error updating application status:", error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ message: "Failed to update application status", error: errorMessage });
     }
   });
 
@@ -376,12 +418,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ message: "Email atau password salah" });
         }
 
+        // Check Firebase email verification status
+        let emailVerified = false;
+        try {
+          const firebaseUser = await getUserByEmail(email);
+          emailVerified = firebaseUser ? firebaseUser.emailVerified : false;
+        } catch (error) {
+          console.log('Could not get Firebase user verification status:', error);
+          emailVerified = false;
+        }
+
         // Generate JWT token for application user
         const token = jwt.sign(
           { 
             uid: (userApplication as any).firebaseUid || userApplication.id, 
             email: userApplication.email,
-            emailVerified: true // Application users are considered verified
+            emailVerified: emailVerified
           },
           process.env.JWT_SECRET || 'your-secret-key',
           { expiresIn: '7d' }
@@ -392,7 +444,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userRole = 'translator';
         }
 
-        console.log(`✅ Application login successful for: ${email}, role: ${userRole}`);
+        console.log(`✅ Application login successful for: ${email}, role: ${userRole}, emailVerified: ${emailVerified}`);
 
         return res.json({
           token,
@@ -401,7 +453,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             email: userApplication.email,
             name: userApplication.name,
             role: userRole,
-            emailVerified: true
+            emailVerified: emailVerified
           }
         });
       }
@@ -442,8 +494,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Document verification endpoints
+  app.patch("/api/applications/:id/documents/:documentType/status", async (req, res) => {
+    try {
+      const { id, documentType } = req.params;
+      const { status, adminNotes } = req.body;
+
+      console.log('📝 Document status update request:', { id, documentType, status, adminNotes });
+
+      if (!['pending', 'approved', 'rejected', 'needs_changes'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+
+      // Map document types to verification fields
+      const documentFieldMap: { [key: string]: string } = {
+        'hsk': 'hskStatus',
+        'studentId': 'studentIdStatus'
+      };
+
+      const statusField = documentFieldMap[documentType];
+      if (!statusField) {
+        return res.status(400).json({ message: "Invalid document type" });
+      }
+
+      console.log('🔄 Updating field:', `verificationSteps.${statusField}`, 'to:', status);
+
+      // Update document verification status in verificationSteps
+      await storage.updateApplicationField(id, `verificationSteps.${statusField}`, status);
+
+      if (adminNotes) {
+        await storage.updateApplicationField(id, `${documentType}AdminNotes`, adminNotes);
+      }
+
+      // Update overall verification progress
+      const application = await storage.getApplicationById(id);
+      if (application) {
+        const verificationSteps = application.verificationSteps as any || {};
+        let completedSteps = 0;
+        const totalSteps = 3; // email, studentId, hsk (removed video)
+
+        console.log('📊 Current verification steps:', verificationSteps);
+
+        if (verificationSteps.emailVerified) completedSteps++;
+        if (verificationSteps.studentIdUploaded && verificationSteps.studentIdStatus === 'approved') completedSteps++;
+        if (verificationSteps.hskUploaded && verificationSteps.hskStatus === 'approved') completedSteps++;
+
+        const progress = Math.round((completedSteps / totalSteps) * 100);
+        console.log('📈 Calculated progress:', progress, 'from steps:', completedSteps, '/', totalSteps);
+        
+        await storage.updateApplicationField(id, 'completenessScore', progress);
+      }
+
+      console.log('✅ Document status update completed successfully');
+      res.json({ message: "Document status updated successfully" });
+    } catch (error) {
+      console.error('❌ Error updating document status:', error);
+      res.status(500).json({ message: "Failed to update document status" });
+    }
+  });
+
+  // Get application by ID for detailed view
+  app.get("/api/applications/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const application = await storage.getApplicationById(id);
+      
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+
+      res.json(application);
+    } catch (error) {
+      console.error('Error fetching application:', error);
+      res.status(500).json({ message: "Failed to fetch application" });
+    }
+  });
+
   // Add verification routes
   app.use("/api", verificationRoutes);
+
+  // Check email verification status
+  app.get("/api/auth/verify-status", async (req, res) => {
+    try {
+      const { email } = req.query;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      // Check Firebase email verification status
+      try {
+        const firebaseUser = await getUserByEmail(email as string);
+        const emailVerified = firebaseUser ? firebaseUser.emailVerified : false;
+        
+        res.json({ emailVerified });
+      } catch (error) {
+        console.log('Could not get Firebase user verification status:', error);
+        res.json({ emailVerified: false });
+      }
+    } catch (error) {
+      console.error('Error checking verification status:', error);
+      res.status(500).json({ message: "Failed to check verification status" });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

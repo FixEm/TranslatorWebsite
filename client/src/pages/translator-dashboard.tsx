@@ -94,7 +94,6 @@ export default function TranslatorDashboard() {
         'profile': 'profile',
         'workspace': 'workspace',
         'verification': 'verification',
-        'projects': 'my-projects',
         'chat': 'chat',
         'notifications': 'notifications',
         'statistics': 'statistics',
@@ -172,13 +171,19 @@ export default function TranslatorDashboard() {
     const fetchApplicationData = async () => {
       if (user?.email) {
         try {
+          console.log('🔍 Fetching application data for email:', user.email);
           const response = await fetch(`/api/applications/translator?email=${user.email}`);
           if (response.ok) {
             const data = await response.json();
+            console.log('✅ Application data fetched:', data);
             setApplicationData(data);
+          } else {
+            console.error('❌ Failed to fetch application data:', response.status, response.statusText);
+            const errorText = await response.text();
+            console.error('Error details:', errorText);
           }
         } catch (error) {
-          console.error('Failed to fetch application data:', error);
+          console.error('❌ Failed to fetch application data:', error);
         }
       }
     };
@@ -198,12 +203,6 @@ export default function TranslatorDashboard() {
       icon: Briefcase,
       key: "workspace",
       isActive: activeTab === 'workspace'
-    },
-    {
-      title: "Proyek Saya",
-      icon: FileText,
-      key: "my-projects",
-      isActive: activeTab === 'my-projects'
     },
     {
       title: "Chat",
@@ -507,32 +506,33 @@ export default function TranslatorDashboard() {
     switch (activeTab) {
       case 'verification':
         return (
-          <VerificationStatus 
-            userId={user?.uid}
-            applicationData={applicationData}
-            onUpdate={() => {
-              // Refresh application data when verification updates
-              if (user?.email) {
-                fetch(`/api/applications/translator?email=${user.email}`)
-                  .then(res => res.json())
-                  .then(data => setApplicationData(data))
-                  .catch(console.error);
-              }
-            }}
-          />
+          <div>
+            {applicationData ? (
+              <VerificationStatus 
+                userId={user?.uid}
+                applicationData={applicationData}
+                onUpdate={() => {
+                  // Refresh application data when verification updates
+                  if (user?.email) {
+                    fetch(`/api/applications/translator?email=${user.email}`)
+                      .then(res => res.json())
+                      .then(data => setApplicationData(data))
+                      .catch(console.error);
+                  }
+                }}
+              />
+            ) : (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-navy-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Memuat data verifikasi...</p>
+              </div>
+            )}
+          </div>
         );
       case 'workspace':
         return renderWorkspace();
       case 'profile':
         return renderProfile();
-      case 'my-projects':
-        return (
-          <div className="text-center py-12">
-            <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-600 mb-2">Belum Ada Proyek</h3>
-            <p className="text-gray-500">Proyek yang Anda kerjakan akan muncul di sini.</p>
-          </div>
-        );
       case 'chat':
         return (
           <div className="text-center py-12">
@@ -616,9 +616,9 @@ export default function TranslatorDashboard() {
           <SidebarHeader className="p-4">
             {/* Back Button */}
             <Button 
-              variant="ghost" 
+              variant="secondary" 
               onClick={() => setLocation('/')}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 w-full justify-start"
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 w-full justify-start bg-gray-50"
             >
               <ArrowLeft className="h-4 w-4" />
               Kembali ke Beranda

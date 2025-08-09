@@ -18,8 +18,10 @@ interface Application {
   services: string[];
   experience: string;
   pricePerDay: string;
-  description: string;
-  intent: 'translator' | 'tour_guide' | 'both';
+  university: string;
+  expectedGraduation: string;
+  motivation: string;
+  intent: 'translator' | 'tour_guide';
   yearsInChina?: number;
   studentEmail?: string;
   studentIdDocument?: string;
@@ -34,8 +36,9 @@ interface Application {
   };
   completenessScore: number;
   status: string;
-  createdAt: Date;
+  createdAt: any; // Firebase Timestamp
   adminNotes?: string;
+  questionnaireData?: any;
 }
 
 export default function AdminDashboard() {
@@ -216,8 +219,8 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="mb-4">
-                  <h4 className="font-medium mb-2">Description</h4>
-                  <p className="text-sm text-gray-700 line-clamp-3">{application.description}</p>
+                  <h4 className="font-medium mb-2">Motivation</h4>
+                  <p className="text-sm text-gray-700 line-clamp-3">{application.motivation}</p>
                 </div>
 
                 <div className="flex items-center space-x-4 mb-4">
@@ -286,6 +289,14 @@ export default function AdminDashboard() {
                               <p className="mt-1 p-2 border rounded">{selectedApplication.city}</p>
                             </div>
                             <div>
+                              <Label>University</Label>
+                              <p className="mt-1 p-2 border rounded">{selectedApplication.university || 'Not provided'}</p>
+                            </div>
+                            <div>
+                              <Label>Expected Graduation</Label>
+                              <p className="mt-1 p-2 border rounded">{selectedApplication.expectedGraduation || 'Not provided'}</p>
+                            </div>
+                            <div>
                               <Label>Service Intent</Label>
                               <p className="mt-1 p-2 border rounded">{selectedApplication.intent}</p>
                             </div>
@@ -295,9 +306,19 @@ export default function AdminDashboard() {
                             </div>
                           </div>
                           <div>
-                            <Label>Description</Label>
-                            <p className="mt-1 p-4 border rounded min-h-[100px]">{selectedApplication.description}</p>
+                            <Label>Motivation for Joining AyoCabut</Label>
+                            <p className="mt-1 p-4 border rounded min-h-[100px]">{selectedApplication.motivation}</p>
                           </div>
+                          {selectedApplication.questionnaireData && (
+                            <div>
+                              <Label>Questionnaire Data</Label>
+                              <div className="mt-1 p-4 border rounded min-h-[100px] bg-gray-50">
+                                <pre className="text-sm whitespace-pre-wrap">
+                                  {JSON.stringify(selectedApplication.questionnaireData, null, 2)}
+                                </pre>
+                              </div>
+                            </div>
+                          )}
                         </TabsContent>
 
                         <TabsContent value="documents" className="space-y-4">

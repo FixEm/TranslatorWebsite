@@ -190,26 +190,50 @@ export class FirebaseStorage {
     return snapshot.docs.map(doc => {
       const data = doc.data() || {};
       const { id: _, ...cleanData } = data;
+      
+      // Convert Firestore timestamps to JavaScript Date objects
+      const convertedData = { ...cleanData };
+      if (convertedData.createdAt && convertedData.createdAt.toDate) {
+        convertedData.createdAt = convertedData.createdAt.toDate();
+      }
+      if (convertedData.updatedAt && convertedData.updatedAt.toDate) {
+        convertedData.updatedAt = convertedData.updatedAt.toDate();
+      }
+      
       return {
-        ...cleanData,
+        ...convertedData,
         id: doc.id
       } as Application;
     });
   }
 
   async updateApplicationStatus(id: string, status: string): Promise<Application | undefined> {
-    await this.applicationsCollection.doc(id).update({ status });
+    console.log("🔄 Firebase: Updating application status:", { id, status });
     
-    const doc = await this.applicationsCollection.doc(id).get();
-    if (!doc.exists) return undefined;
-    
-    const data = doc.data() || {};
-    const { id: _, ...cleanData } = data;
-    
-    return {
-      ...cleanData,
-      id: doc.id
-    } as Application;
+    try {
+      await this.applicationsCollection.doc(id).update({ status, updatedAt: new Date() });
+      console.log("✅ Firebase: Status update successful");
+      
+      const doc = await this.applicationsCollection.doc(id).get();
+      if (!doc.exists) {
+        console.log("❌ Firebase: Document not found after update");
+        return undefined;
+      }
+      
+      const data = doc.data() || {};
+      const { id: _, ...cleanData } = data;
+      
+      const result = {
+        ...cleanData,
+        id: doc.id
+      } as Application;
+      
+      console.log("✅ Firebase: Returning updated application:", result);
+      return result;
+    } catch (error) {
+      console.error("❌ Firebase: Error updating application status:", error);
+      throw error;
+    }
   }
 
   async updateServiceProvider(id: string, updates: Partial<ServiceProvider>): Promise<ServiceProvider | undefined> {
@@ -319,6 +343,21 @@ export class FirebaseStorage {
       rejectedAt: new Date().toISOString(),
       updatedAt: new Date()
     });
+  }
+
+  // Generic method to update any field in an application
+  async updateApplicationField(id: string, field: string, value: any): Promise<void> {
+    const updateData: any = {
+      updatedAt: new Date()
+    };
+    updateData[field] = value;
+    
+    await this.applicationsCollection.doc(id).update(updateData);
+  }
+
+  // Alias for getApplication to match expected naming
+  async getApplicationById(id: string): Promise<Application | undefined> {
+    return this.getApplication(id);
   }
 }
 
