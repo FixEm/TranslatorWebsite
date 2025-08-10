@@ -50,10 +50,10 @@ export function isStudentEmail(email: string): boolean {
 export function calculateCompletenessScore(verificationSteps: any): number {
   const steps = {
     emailVerified: 30,
-    studentIdUploaded: 20,
-    hskUploaded: 15,
-    introVideoUploaded: 20,
-    adminApproved: 15
+    studentIdUploaded: 25,
+    hskUploaded: 20,
+    introVideoUploaded: 25,
+    adminApproved: 0  // Admin approval doesn't add points, but is required for activation
   };
   
   let score = 0;
@@ -64,6 +64,19 @@ export function calculateCompletenessScore(verificationSteps: any): number {
   });
   
   return Math.min(score, 100);
+}
+
+// Helper function to check if account should be activated
+export function isAccountActivated(verificationSteps: any): boolean {
+  // Account is only activated when admin approves, regardless of point total
+  return Boolean(verificationSteps?.adminApproved);
+}
+
+// Helper function to check if account is ready for admin review
+export function isReadyForReview(verificationSteps: any): boolean {
+  const completenessScore = calculateCompletenessScore(verificationSteps);
+  // Ready for review when has enough points and all required documents are uploaded
+  return completenessScore >= 80 && !verificationSteps?.adminApproved;
 }
 
 // Create Firebase user and send email verification with token

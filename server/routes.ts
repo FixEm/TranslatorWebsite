@@ -7,7 +7,7 @@ import path from "path";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import verificationRoutes from "./verification-routes";
-import { auth, getUserByEmail, createUserAndSendVerification } from "./auth";
+import { auth, getUserByEmail, createUserAndSendVerification, calculateCompletenessScore, isAccountActivated, isReadyForReview } from "./auth";
 import { sendVerificationEmail } from "./email-service";
 
 // Create Firebase storage instance
@@ -244,6 +244,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get verified users (applications with approved status and isVerified flag)
+  app.get("/api/applications/verified", async (req, res) => {
+    try {
+      console.log("📡 API called: /api/applications/verified");
+      const allApplications = await storage.getApplications();
+      
+      // Filter for verified applications (approved status and admin approved)
+      const verifiedUsers = allApplications.filter(app => {
+        const verificationSteps = app.verificationSteps as any || {};
+        return app.status === 'approved' && verificationSteps.adminApproved === true;
+      });
+      
+      console.log(`🔥 Found ${verifiedUsers.length} verified users from ${allApplications.length} total applications`);
+      res.json(verifiedUsers);
+    } catch (error) {
+      console.error("❌ Error fetching verified users:", error);
+      res.status(500).json({ message: "Failed to fetch verified users" });
+    }
+  });
+
   // Update application status (approve/reject)
   app.patch("/api/applications/:id/status", async (req, res) => {
     try {
@@ -305,6 +325,245 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Final approval endpoint (sets adminApproved to true)
+  app.patch("/api/applications/:id/final-approval", async (req, res) => {
+    try {
+      console.log("🎯 FINAL APPROVAL:", { id: req.params.id });
+      const { id } = req.params;
+      
+      // Get the current application to update verificationSteps properly
+      console.log("🔄 Getting current application data...");
+      const currentApp = await storage.getApplication(id);
+      if (!currentApp) {
+        console.log("❌ Application not found:", id);
+        return res.status(404).json({ message: "Application not found" });
+      }
+      
+      console.log("📋 Current verificationSteps:", currentApp.verificationSteps);
+      
+      // Update verificationSteps with adminApproved
+      const updatedVerificationSteps = {
+        ...(currentApp as any).verificationSteps,
+        adminApproved: true
+      };
+      
+      console.log("🔄 Updating all fields in a single operation...");
+      
+      // Update all fields using the existing updateApplicationField method
+      await storage.updateApplicationField(id, 'verificationSteps', updatedVerificationSteps);
+      await storage.updateApplicationField(id, 'finalStatus', 'approved');
+      await storage.updateApplicationField(id, 'recruitmentStatus', 'accepted');
+      await storage.updateApplicationField(id, 'status', 'approved');
+      
+      console.log("✅ All fields updated successfully");
+      
+      // Get the updated application to return
+      const updatedApplication = await storage.getApplication(id);
+      
+      console.log("✅ Final approval completed for:", updatedApplication?.email);
+      res.json({ message: "Application finally approved", application: updatedApplication });
+    } catch (error) {
+      console.error("❌ Error in final approval:", error);
+      res.status(500).json({ message: "Failed to process final approval" });
+    }
+  });
+
+  // Revoke verification for an application
+  app.patch("/api/applications/:id/revoke-verification", async (req, res) => {
+    try {
+      console.log("🚫 REVOKE VERIFICATION:", { id: req.params.id });
+      const { id } = req.params;
+      
+      // Get the current application to update verificationSteps properly
+      console.log("🔄 Getting current application data...");
+      const currentApp = await storage.getApplication(id);
+      if (!currentApp) {
+        console.log("❌ Application not found:", id);
+        return res.status(404).json({ message: "Application not found" });
+      }
+      
+      console.log("📋 Current application status:", {
+        name: currentApp.name,
+        status: currentApp.status,
+        finalStatus: (currentApp as any).finalStatus,
+        recruitmentStatus: (currentApp as any).recruitmentStatus
+      });
+      
+      // Update verificationSteps to revoke admin approval
+      const updatedVerificationSteps = {
+        ...(currentApp as any).verificationSteps,
+        adminApproved: false
+      };
+      
+      console.log("🔄 Revoking verification and clearing accept/reject status...");
+      
+      // Update all fields to revoke verification and reset accept/reject status
+      console.log("🔄 Updating verificationSteps...");
+      await storage.updateApplicationField(id, 'verificationSteps', updatedVerificationSteps);
+      console.log("✅ verificationSteps updated");
+      
+      console.log("🔄 Updating finalStatus to pending...");
+      await storage.updateApplicationField(id, 'finalStatus', 'pending'); // Clear approved/rejected status
+      console.log("✅ finalStatus updated");
+      
+      console.log("🔄 Updating recruitmentStatus to pending_interview...");
+      await storage.updateApplicationField(id, 'recruitmentStatus', 'pending_interview'); // Reset to initial recruitment stage
+      console.log("✅ recruitmentStatus updated");
+      
+      console.log("🔄 Updating status to approved...");
+      await storage.updateApplicationField(id, 'status', 'approved'); // Keep basic approval but remove final decision
+      console.log("✅ status updated");
+      
+      console.log("✅ Verification revoked successfully");
+      
+      // Get the updated application to return
+      const updatedApplication = await storage.getApplication(id);
+      
+      console.log("✅ Verification revoked for:", updatedApplication?.email);
+      res.json({ message: "Verification revoked successfully", application: updatedApplication });
+    } catch (error) {
+      console.error("❌ Error revoking verification:", error);
+      res.status(500).json({ message: "Failed to revoke verification" });
+    }
+  });
+
+  // Request changes for specific documents
+  app.patch("/api/applications/:id/request-changes", async (req, res) => {
+    try {
+      console.log("📝 REQUEST CHANGES:", { id: req.params.id, changes: req.body.changes });
+      const { id } = req.params;
+      const { changes, message } = req.body;
+      
+      if (!changes || !Array.isArray(changes) || changes.length === 0) {
+        return res.status(400).json({ message: "Changes array is required" });
+      }
+      
+      // Get the current application
+      const currentApp = await storage.getApplication(id);
+      if (!currentApp) {
+        console.log("❌ Application not found:", id);
+        return res.status(404).json({ message: "Application not found" });
+      }
+      
+      console.log("📋 Current application:", {
+        name: currentApp.name,
+        email: currentApp.email
+      });
+      
+      // Delete files from Firebase Storage for requested documents
+      console.log("🗑️ Deleting files from storage for requested changes...");
+      try {
+        await storage.deleteApplicationDocuments(id, changes);
+        console.log("✅ Files deleted successfully");
+      } catch (deleteError) {
+        console.error("⚠️ Error deleting files (continuing anyway):", deleteError);
+        // Continue even if file deletion fails - the important part is the change request
+      }
+      
+      // Create change requests object
+      const changeRequests = {
+        requests: changes.map((change: string) => ({
+          type: change,
+          message: message || `Please resubmit your ${
+            change === 'hsk' ? 'HSK Certificate' : 
+            change === 'studentId' ? 'Student ID Document' : 
+            change === 'cv' ? 'CV/Resume' : 'document'
+          }`,
+          requestedAt: new Date().toISOString(),
+          status: 'pending'
+        })),
+        createdAt: new Date().toISOString()
+      };
+      
+      // Update verificationSteps to mark requested documents as needing changes and reset upload status
+      const updatedVerificationSteps = {
+        ...(currentApp as any).verificationSteps
+      };
+      
+      changes.forEach((change: string) => {
+        if (change === 'hsk') {
+          updatedVerificationSteps.hskStatus = 'changes_requested';
+          updatedVerificationSteps.hskUploaded = false; // Reset upload status
+        } else if (change === 'studentId') {
+          updatedVerificationSteps.studentIdStatus = 'changes_requested';
+          updatedVerificationSteps.studentIdUploaded = false; // Reset upload status
+        } else if (change === 'cv') {
+          updatedVerificationSteps.cvStatus = 'changes_requested';
+          updatedVerificationSteps.cvUploaded = false; // Reset upload status
+        }
+      });
+      
+      console.log("🔄 Updating verification steps and change requests...");
+      await storage.updateApplicationField(id, 'verificationSteps', updatedVerificationSteps);
+      await storage.updateApplicationField(id, 'changeRequests', changeRequests);
+      
+      console.log("✅ Change requests created successfully");
+      
+      // Get the updated application to return
+      const updatedApplication = await storage.getApplication(id);
+      
+      res.json({ 
+        message: "Change requests sent successfully", 
+        application: updatedApplication,
+        changeRequests 
+      });
+    } catch (error) {
+      console.error("❌ Error creating change requests:", error);
+      res.status(500).json({ message: "Failed to create change requests" });
+    }
+  });
+
+  // Update HSK level
+  app.put("/api/applications/:id/hsk-level", async (req, res) => {
+    try {
+      console.log("📚 Updating HSK level:", { id: req.params.id, hskLevel: req.body.hskLevel });
+      const { id } = req.params;
+      const { hskLevel } = req.body;
+      
+      if (!hskLevel) {
+        return res.status(400).json({ message: "HSK level is required" });
+      }
+      
+      // Update HSK level in the application
+      await storage.updateApplicationField(id, 'hskLevel', hskLevel);
+      
+      console.log("✅ HSK level updated successfully");
+      res.json({ message: "HSK level updated successfully", hskLevel });
+    } catch (error) {
+      console.error("❌ Error updating HSK level:", error);
+      res.status(500).json({ message: "Failed to update HSK level" });
+    }
+  });
+
+  // General application update endpoint
+  app.patch("/api/applications/:id", async (req, res) => {
+    try {
+      console.log("🔄 Updating application:", { id: req.params.id, updates: req.body });
+      const { id } = req.params;
+      const updates = req.body;
+      
+      // Get current application first
+      const currentApp = await storage.getApplication(id);
+      if (!currentApp) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      
+      // Update each field provided in the request body
+      for (const [field, value] of Object.entries(updates)) {
+        await storage.updateApplicationField(id, field, value);
+      }
+      
+      // Get updated application
+      const updatedApp = await storage.getApplication(id);
+      
+      console.log("✅ Application updated successfully");
+      res.json({ message: "Application updated successfully", application: updatedApp });
+    } catch (error) {
+      console.error("❌ Error updating application:", error);
+      res.status(500).json({ message: "Failed to update application" });
+    }
+  });
+
   // Create contact/inquiry
   app.post("/api/contacts", async (req, res) => {
     try {
@@ -329,20 +588,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get dashboard stats
   app.get("/api/stats", async (req, res) => {
     try {
-      const allProviders = await storage.getServiceProviders();
+      console.log("📊 STATS ENDPOINT CALLED - Starting calculation...");
       const applications = await storage.getApplications();
       const contacts = await storage.getContacts();
       
+      console.log("📊 Raw applications data:", applications.length, "total");
+      
+      // Count total translators (all applications since they're all applying to be translators)
+      const totalTranslators = applications.length;
+      
+      // Count verified translators (applications that are approved and have completed verification)
+      const verifiedTranslators = applications.filter(app => {
+        const verificationSteps = (app as any).verificationSteps || {};
+        const isVerified = app.status === 'approved' && 
+               verificationSteps.emailVerified && 
+               verificationSteps.adminApproved &&
+               (app as any).finalStatus === 'approved';
+        
+        console.log(`📊 Checking ${app.name}:`, {
+          status: app.status,
+          emailVerified: verificationSteps.emailVerified,
+          adminApproved: verificationSteps.adminApproved,
+          finalStatus: (app as any).finalStatus,
+          isVerified
+        });
+        
+        return isVerified;
+      }).length;
+      
+      // Count pending applications (not yet approved by admin)
+      const pendingApplications = applications.filter(app => {
+        const verificationSteps = (app as any).verificationSteps || {};
+        return app.status === 'pending' || !verificationSteps.adminApproved;
+      }).length;
+      
+      // Keep total transactions as contacts for now
+      const totalTransactions = contacts.length;
+      
       const stats = {
-        totalTranslators: allProviders.length,
-        verifiedTranslators: allProviders.filter(p => p.isVerified).length,
-        pendingApplications: applications.filter(a => a.status === 'pending').length,
-        totalTransactions: contacts.length,
+        totalTranslators,
+        verifiedTranslators,
+        pendingApplications,
+        totalTransactions,
       };
+      
+      console.log("📊 Final stats calculated:", stats);
       
       res.json(stats);
     } catch (error) {
+      console.error("❌ Error calculating stats:", error);
       res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+
+  // Recent activities endpoint
+  app.get("/api/recent-activities", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      
+      // Sort applications by most recent updates and take the last 5
+      const recentApps = applications
+        .sort((a, b) => new Date((b as any).updatedAt || b.createdAt).getTime() - new Date((a as any).updatedAt || a.createdAt).getTime())
+        .slice(0, 5);
+      
+      const activities = recentApps.map(app => {
+        const verificationSteps = (app as any).verificationSteps || {};
+        const finalStatus = (app as any).finalStatus;
+        const recruitmentStatus = (app as any).recruitmentStatus;
+        
+        let activityType = "registration";
+        let message = `${app.name} mendaftar sebagai penerjemah`;
+        let status = "new";
+        
+        if (finalStatus === 'approved') {
+          activityType = "approval";
+          message = `${app.name} telah disetujui dan diverifikasi`;
+          status = "approved";
+        } else if (finalStatus === 'rejected') {
+          activityType = "rejection";
+          message = `${app.name} ditolak dari rekrutmen`;
+          status = "rejected";
+        } else if (verificationSteps.adminApproved) {
+          activityType = "verification";
+          message = `${app.name} telah diverifikasi`;
+          status = "verified";
+        } else if (verificationSteps.emailVerified) {
+          activityType = "email_verified";
+          message = `${app.name} memverifikasi email`;
+          status = "progress";
+        }
+        
+        return {
+          id: app.id,
+          type: activityType,
+          message,
+          timestamp: (app as any).updatedAt || app.createdAt,
+          status
+        };
+      });
+      
+      res.json(activities);
+    } catch (error) {
+      console.error("❌ Error fetching recent activities:", error);
+      res.status(500).json({ message: "Failed to fetch recent activities" });
     }
   });
 
@@ -509,7 +857,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Map document types to verification fields
       const documentFieldMap: { [key: string]: string } = {
         'hsk': 'hskStatus',
-        'studentId': 'studentIdStatus'
+        'studentId': 'studentIdStatus',
+        'cv': 'cvStatus'
       };
 
       const statusField = documentFieldMap[documentType];
@@ -531,13 +880,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (application) {
         const verificationSteps = application.verificationSteps as any || {};
         let completedSteps = 0;
-        const totalSteps = 3; // email, studentId, hsk (removed video)
+        const totalSteps = 4; // email, studentId, hsk, cv
 
         console.log('📊 Current verification steps:', verificationSteps);
 
         if (verificationSteps.emailVerified) completedSteps++;
         if (verificationSteps.studentIdUploaded && verificationSteps.studentIdStatus === 'approved') completedSteps++;
         if (verificationSteps.hskUploaded && verificationSteps.hskStatus === 'approved') completedSteps++;
+        if (verificationSteps.cvUploaded && verificationSteps.cvStatus === 'approved') completedSteps++;
 
         const progress = Math.round((completedSteps / totalSteps) * 100);
         console.log('📈 Calculated progress:', progress, 'from steps:', completedSteps, '/', totalSteps);
@@ -595,6 +945,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error checking verification status:', error);
       res.status(500).json({ message: "Failed to check verification status" });
+    }
+  });
+
+  // Update application availability
+  app.put("/api/applications/:id/availability", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const availabilityData = req.body;
+
+      console.log('📅 Updating availability for application:', id);
+      console.log('📊 Availability data:', availabilityData);
+
+      // Update availability in Firebase
+      await storage.updateApplicationAvailability(id, availabilityData);
+
+      res.json({ 
+        message: "Availability updated successfully",
+        availability: availabilityData 
+      });
+    } catch (error) {
+      console.error('❌ Error updating availability:', error);
+      res.status(500).json({ message: "Failed to update availability" });
+    }
+  });
+
+  // Get application availability
+  app.get("/api/applications/:id/availability", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      console.log('📅 Getting availability for application:', id);
+
+      // Get availability from Firebase
+      const availability = await storage.getApplicationAvailability(id);
+
+      res.json(availability);
+    } catch (error) {
+      console.error('❌ Error getting availability:', error);
+      res.status(500).json({ message: "Failed to get availability" });
     }
   });
 

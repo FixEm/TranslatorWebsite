@@ -367,12 +367,12 @@ export default function TranslatorSignup() {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="pricePerDay">Expektasi per hari(¥)</Label>
+                    <Label htmlFor="pricePerDay">Expektasi per hari (Rp)</Label>
                     <Input
                       id="pricePerDay"
                       value={application.pricePerDay}
                       onChange={(e) => setApplication(prev => ({ ...prev, pricePerDay: e.target.value }))}
-                      placeholder="300"
+                      placeholder="500 000"
                       type="number"
                       required
                     />

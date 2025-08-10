@@ -409,7 +409,7 @@ export default function RegisterPage() {
 
                   <div className="mt-6">
                     <FileUpload
-                      label="Sertifikat/Portfolio (Opsional)"
+                      label="Sertifikat/Portfolio )"
                       accept="image/*,.pdf,.doc,.docx"
                       multiple
                       maxFiles={5}

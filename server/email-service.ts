@@ -1,25 +1,43 @@
 import 'dotenv/config';
 import nodemailer from 'nodemailer';
 
-// Create SMTP transporter
+// Create SMTP transporter for Zoho
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: false, // Use TLS
+  host: process.env.SMTP_HOST || 'smtp.zoho.com',
+  port: parseInt(process.env.SMTP_PORT || '465'),
+  secure: parseInt(process.env.SMTP_PORT || '465') === 465, // true for 465, false for other ports
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+  tls: {
+    rejectUnauthorized: false
+  }
 });
 
-// Verify SMTP connection
+// Verify SMTP connection with detailed logging
 export async function verifyEmailService(): Promise<boolean> {
   try {
+    console.log('🔄 Testing SMTP connection with settings:');
+    console.log(`  Host: ${process.env.SMTP_HOST}`);
+    console.log(`  Port: ${process.env.SMTP_PORT}`);
+    console.log(`  User: ${process.env.SMTP_USER}`);
+    console.log(`  From: ${process.env.FROM_EMAIL}`);
+    
     await transporter.verify();
-    console.log('✅ SMTP server connection verified');
+    console.log('✅ SMTP server connection verified successfully');
     return true;
   } catch (error) {
-    console.error('❌ SMTP server connection failed:', error);
+    console.error('❌ SMTP server connection failed:');
+    console.error('Error details:', error);
+    
+    // Provide helpful troubleshooting tips
+    console.log('\n🔧 Troubleshooting tips:');
+    console.log('1. Make sure you\'re using an App Password, not your regular password');
+    console.log('2. Check if 2-Factor Authentication is enabled in Zoho');
+    console.log('3. Verify your email address is correct');
+    console.log('4. Try using port 465 with SSL instead of 587 with STARTTLS');
+    
     return false;
   }
 }
@@ -307,7 +325,7 @@ export async function sendWelcomeEmail(email: string, name: string): Promise<boo
             <li>Build your reputation through reviews</li>
           </ul>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/profile" class="button">
+            <a href="${process.env.BASE_URL || 'http://localhost:5000'}/login" class="button">
               Access Your Profile
             </a>
           </div>

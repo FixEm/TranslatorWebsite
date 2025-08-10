@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +7,11 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { 
@@ -35,6 +40,7 @@ import { Application } from "@shared/schema";
 const SIDEBAR_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: BarChart3 },
   { key: "recruitment", label: "Recruitment", icon: Handshake },
+  { key: "verified-users", label: "Verified Users", icon: UserCheck },
   { key: "student-pool", label: "Student Pool", icon: Users },
 ];
 
@@ -46,7 +52,18 @@ export default function AdminPage() {
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [studentTypeFilter, setStudentTypeFilter] = useState("all");  // New state for student type filtering	// Fetch dashboard stats
+  const [studentTypeFilter, setStudentTypeFilter] = useState("all");  // New state for student type filtering
+  const [verifiedUsers, setVerifiedUsers] = useState<any[]>([]);
+  const [showVerifiedUsers, setShowVerifiedUsers] = useState(false);
+  const [interviewModalOpen, setInterviewModalOpen] = useState(false);
+  const [requestChangesModalOpen, setRequestChangesModalOpen] = useState(false);
+  const [selectedChanges, setSelectedChanges] = useState<string[]>([]);
+  const [changeMessage, setChangeMessage] = useState("");
+  const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
+  const [interviewDateTime, setInterviewDateTime] = useState("");
+  const [interviewTime, setInterviewTime] = useState("");
+  const [meetLink, setMeetLink] = useState("");
+  const [selectedProject, setSelectedProject] = useState("");	// Fetch dashboard stats
 	const { data: stats } = useQuery<{
 		totalTranslators: number;
 		verifiedTranslators: number;
@@ -57,6 +74,22 @@ export default function AdminPage() {
 		queryFn: async () => {
 			const response = await fetch("/api/stats");
 			if (!response.ok) throw new Error("Failed to fetch stats");
+			return response.json();
+		},
+	});
+
+	// Fetch recent activities
+	const { data: recentActivities } = useQuery<Array<{
+		id: string;
+		type: string;
+		message: string;
+		timestamp: string;
+		status: string;
+	}>>({
+		queryKey: ["/api/recent-activities"],
+		queryFn: async () => {
+			const response = await fetch("/api/recent-activities");
+			if (!response.ok) throw new Error("Failed to fetch recent activities");
 			return response.json();
 		},
 	});
@@ -138,19 +171,23 @@ export default function AdminPage() {
 					updatedStudent.hskCertificate.status = status;
 				} else if (documentType === 'studentId') {
 					updatedStudent.studentIdCard.status = status;
+				} else if (documentType === 'cv') {
+					updatedStudent.cvDocument.status = status;
 				}
 				
 				// Recalculate verification progress
 				const emailVerified = true; // Assuming email is always verified at this point
 				const hskApproved = updatedStudent.hskCertificate.status === 'approved';
 				const studentIdApproved = updatedStudent.studentIdCard.status === 'approved';
+				const cvApproved = updatedStudent.cvDocument?.status === 'approved';
 				
 				let completedSteps = 0;
 				if (emailVerified) completedSteps++;
 				if (hskApproved) completedSteps++;
 				if (studentIdApproved) completedSteps++;
+				if (cvApproved) completedSteps++;
 				
-				updatedStudent.verificationProgress = Math.round((completedSteps / 3) * 100);
+				updatedStudent.verificationProgress = Math.round((completedSteps / 4) * 100);
 				
 				setSelectedStudent(updatedStudent);
 			}
@@ -160,6 +197,46 @@ export default function AdminPage() {
 			toast({
 				title: "Error",
 				description: "Failed to update document status.",
+				variant: "destructive",
+			});
+		},
+	});
+
+	// Request changes mutation
+	const requestChangesMutation = useMutation({
+		mutationFn: async ({ studentId, changes, message }: { 
+			studentId: string; 
+			changes: string[]; 
+			message?: string;
+		}) => {
+			console.log('📡 Requesting changes:', { studentId, changes, message });
+			const response = await apiRequest("PATCH", `/api/applications/${studentId}/request-changes`, { 
+				changes, 
+				message 
+			});
+			console.log('✅ Changes requested:', response);
+			return response;
+		},
+		onSuccess: (data, { studentId, changes }) => {
+			console.log('🎉 Changes requested successfully:', { studentId, changes });
+			toast({
+				title: "Changes Requested",
+				description: `Requested changes for ${changes.join(' and ')}`,
+			});
+			
+			// Close modal and reset form
+			setRequestChangesModalOpen(false);
+			setSelectedChanges([]);
+			setChangeMessage("");
+			
+			// Refresh all application data
+			queryClient.invalidateQueries({ queryKey: ["/api/applications"] });
+		},
+		onError: (error) => {
+			console.error('❌ Request changes failed:', error);
+			toast({
+				title: "Error",
+				description: "Failed to request changes.",
 				variant: "destructive",
 			});
 		},
@@ -266,7 +343,7 @@ export default function AdminPage() {
       city: app.city,
       pricePerDay: app.pricePerDay,
       languages: questionnaireData.fluentLanguages || (app as any).fluentLanguages || (app as any).languages || [],
-      availability: questionnaireData.availability || (app as any).availability || 'Not specified',
+      availabilityText: questionnaireData.availability || 'Not specified',
       specializations: questionnaireData.specializations || (app as any).specializations || [],
       status: app.status,
       submittedAt: formatDate((app as any).createdAt || (app as any).submittedAt || new Date()),
@@ -278,6 +355,11 @@ export default function AdminPage() {
         status: verificationSteps.studentIdStatus || "pending", 
         url: (app as any).studentIdDocument || null 
       },
+      cvDocument: { 
+        status: verificationSteps.cvStatus || "pending", 
+        url: (app as any).cvDocument || null 
+      },
+      availability: (app as any).availability || null,
       verificationProgress: (() => {
         const completenessScore = (app as any).completenessScore;
         // If completenessScore exists and is a valid number, use it
@@ -285,18 +367,33 @@ export default function AdminPage() {
           return Number(completenessScore);
         }
         
-        // Otherwise calculate based on status
-        if (app.status === 'approved') return 100;
+        // Calculate based on new point system (admin approval required for 100%)
         if (app.status === 'rejected') return 0;
         
-        // Calculate based on verification steps
+        // Calculate based on verification steps using new point system
         const steps = verificationSteps || {};
-        let completedSteps = 0;
-        if (steps.emailVerified) completedSteps++;
-        if (steps.studentIdUploaded || (app as any).studentIdDocument) completedSteps++;
-        if (steps.hskUploaded || (app as any).hskCertificate) completedSteps++;
         
-        return Math.round((completedSteps / 3) * 100);
+        const points = {
+          emailVerified: 30,
+          studentIdUploaded: 25,
+          hskUploaded: 20,
+          cvUploaded: 15,
+          availabilitySet: 10,
+        };
+        
+        let score = 0;
+        if (steps.emailVerified) score += points.emailVerified;
+        if (steps.studentIdUploaded || (app as any).studentIdDocument) score += points.studentIdUploaded;
+        if (steps.hskUploaded || (app as any).hskCertificate) score += points.hskUploaded;
+        if (steps.cvUploaded || (app as any).cvDocument) score += points.cvUploaded;
+        if ((app as any).availability) score += points.availabilitySet;
+        
+        // Account is only "complete" (100%) when admin approves
+        if (steps.adminApproved && app.status === 'approved') {
+          return 100;
+        }
+        
+        return Math.min(score, 99); // Cap at 99% until admin approval
       })(),
       // Add additional fields for debugging
       experience: questionnaireData.experience || app.experience,
@@ -309,6 +406,14 @@ export default function AdminPage() {
   // Transform approved applications for recruitment pipeline
   const transformApplicationToCandidate = (app: Application) => {
     const questionnaireData = (app as any).questionnaireData || {};
+    
+    // Debug logging to see what data we're getting
+    console.log("🔍 Transforming candidate:", app.name, {
+      originalFinalStatus: (app as any).finalStatus,
+      originalRecruitmentStatus: (app as any).recruitmentStatus,
+      hasData: !!(app as any).finalStatus && !!(app as any).recruitmentStatus
+    });
+    
     return {
       id: app.id,
       name: app.name,
@@ -316,15 +421,15 @@ export default function AdminPage() {
       studentId: (app as any).studentId || 'N/A',
       university: (app as any).university || 'Not specified',
       phone: app.whatsapp,
-      hskLevel: "HSK 6", // Default - should be in app data
+      hskLevel: (app as any).hskLevel || 'Not set', // Get from application object
       specializations: questionnaireData.specializations || Array.isArray(app.services) ? app.services : [app.intent || 'translator'],
       experience: questionnaireData.experience || app.experience,
-      rating: 4.5, // Default rating
+      rating: 0, // Default rating
       completedProjects: 0, // Default
-      recruitmentStatus: "pending_interview",
+      recruitmentStatus: (app as any).recruitmentStatus || "pending_interview",
       approvedAt: formatDate((app as any).createdAt || new Date()),
       interviewScheduled: null,
-      finalStatus: "pending"
+      finalStatus: (app as any).finalStatus || "pending"
     };
   };
 
@@ -340,6 +445,43 @@ export default function AdminPage() {
         return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Sudah Wawancara</Badge>;
       case 'final_approval':
         return <Badge className="bg-green-100 text-green-800">Persetujuan Akhir</Badge>;
+      case 'accepted':
+        return <Badge className="bg-green-100 text-green-800">Diterima</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive">Ditolak</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  // Helper functions for recent activities
+  const getActivityTitle = (type: string) => {
+    switch (type) {
+      case 'registration':
+        return 'Pendaftaran Baru';
+      case 'email_verified':
+        return 'Email Diverifikasi';
+      case 'verification':
+        return 'Verifikasi Selesai';
+      case 'approval':
+        return 'Disetujui & Diverifikasi';
+      case 'rejection':
+        return 'Ditolak';
+      default:
+        return 'Aktivitas';
+    }
+  };
+
+  const getActivityBadge = (status: string) => {
+    switch (status) {
+      case 'new':
+        return <Badge variant="secondary">Baru</Badge>;
+      case 'progress':
+        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Progress</Badge>;
+      case 'verified':
+        return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Terverifikasi</Badge>;
+      case 'approved':
+        return <Badge className="bg-green-100 text-green-800">Disetujui</Badge>;
       case 'rejected':
         return <Badge variant="destructive">Ditolak</Badge>;
       default:
@@ -350,9 +492,9 @@ export default function AdminPage() {
   const getFinalStatusBadge = (status: string) => {
     switch (status) {
       case 'approved':
-        return <Badge className="bg-green-100 text-green-800">Disetujui</Badge>;
+        return <Badge className="bg-green-100 text-green-800">Approved</Badge>;
       case 'rejected':
-        return <Badge variant="destructive">Ditolak</Badge>;
+        return <Badge variant="destructive">Rejected</Badge>;
       case 'pending':
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Menunggu</Badge>;
       default:
@@ -364,7 +506,8 @@ export default function AdminPage() {
     // Map document names to API types
     const documentTypeMap: { [key: string]: string } = {
       'HSK Certificate': 'hsk',
-      'Student ID Card': 'studentId'
+      'Student ID Card': 'studentId',
+      'CV/Resume': 'cv'
     };
 
     const documentType = documentTypeMap[document];
@@ -379,6 +522,41 @@ export default function AdminPage() {
 
     console.log('🔄 Updating document status:', { studentId, documentType, status });
     updateDocumentMutation.mutate({ studentId, documentType, status });
+  };
+
+  const updateHskLevel = async (studentId: string, hskLevel: string) => {
+    try {
+      const response = await fetch(`/api/applications/${studentId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ hskLevel }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update HSK level');
+
+      // Update local state
+      setSelectedStudent((prev: any) => ({
+        ...prev,
+        hskLevel: hskLevel
+      }));
+
+      toast({
+        title: "HSK Level Updated", 
+        description: `HSK level set to ${hskLevel}`,
+      });
+
+      // Refresh the student data
+      queryClient.invalidateQueries({ queryKey: ["/api/applications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/applications/verified"] });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update HSK level",
+        variant: "destructive",
+      });
+    }
   };
 
   const updateStudentStatus = (studentId: string, status: string) => {
@@ -399,12 +577,108 @@ export default function AdminPage() {
     });
   };
 
-  const finalApproval = (candidateId: string, approved: boolean) => {
-    toast({
-      title: approved ? "Candidate Approved" : "Candidate Rejected",
-      description: approved ? "Candidate has been approved for recruitment" : "Candidate has been rejected",
-    });
+  const finalApproval = async (candidateId: string, approved: boolean) => {
+    try {
+      if (approved) {
+        // Use the final approval endpoint for acceptance
+        const response = await fetch(`/api/applications/${candidateId}/final-approval`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) throw new Error('Failed to approve user');
+        
+        // Add to verified users list
+        const candidate = recruitmentCandidates.find((c: any) => c.id === candidateId);
+        if (candidate) {
+          setVerifiedUsers(prev => [...prev, { ...candidate, isVerified: true }]);
+        }
+      } else {
+        // Handle rejection by updating the application status
+        const response = await fetch(`/api/applications/${candidateId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            finalStatus: 'rejected',
+            recruitmentStatus: 'rejected'
+          }),
+        });
+
+        if (!response.ok) throw new Error('Failed to reject candidate');
+      }
+      
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/applications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/applications/verified"] });
+
+      toast({
+        title: approved ? "Candidate Approved & Verified" : "Candidate Rejected",
+        description: approved ? "Candidate has been approved and verified for recruitment" : "Candidate has been rejected from recruitment",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update candidate status",
+        variant: "destructive",
+      });
+    }
   };
+
+  // Fetch verified users
+  const fetchVerifiedUsers = async () => {
+    try {
+      const response = await fetch('/api/applications/verified');
+      if (!response.ok) throw new Error('Failed to fetch verified users');
+      const data = await response.json();
+      setVerifiedUsers(data);
+    } catch (error) {
+      console.error('Error fetching verified users:', error);
+    }
+  };
+
+  // Revoke verification for a user
+  const revokeVerification = async (userId: string, userName: string) => {
+    try {
+      const response = await fetch(`/api/applications/${userId}/revoke-verification`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) throw new Error('Failed to revoke verification');
+
+      // Remove user from verified users list
+      setVerifiedUsers(prev => prev.filter(user => user.id !== userId));
+
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/applications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/applications/verified"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+
+      toast({
+        title: "Verification Revoked",
+        description: `${userName}'s verification has been revoked successfully`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to revoke verification",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Fetch verified users on component mount
+  useEffect(() => {
+    if (activeTab === "recruitment") {
+      fetchVerifiedUsers();
+    }
+  }, [activeTab]);
 
   const viewDocument = (url: string | null, documentType: string) => {
     if (!url) {
@@ -418,7 +692,48 @@ export default function AdminPage() {
     
     // Open document in new tab
     window.open(url, '_blank');
-  };	return (
+  };
+
+  const viewUserProfile = (user: any) => {
+    // Find the full application data for this user
+    const fullApplication = allApplications?.find(app => app.id === user.id);
+    
+    if (fullApplication) {
+      // Transform the application to student format
+      const studentData = transformApplicationToStudent(fullApplication);
+      
+      // Set the selected student and switch to student pool tab
+      setSelectedStudent(studentData);
+      setActiveTab("student-pool");
+    } else {
+      // If not found in applications, try to create student data from available user data
+      const studentData = {
+        ...user,
+        // Ensure we have all the required fields for the student detail view
+        hskCertificate: { 
+          status: "approved", // Since they're verified
+          url: user.hskCertificate || null 
+        },
+        studentIdCard: { 
+          status: "approved", // Since they're verified
+          url: user.studentIdDocument || null 
+        },
+        verificationProgress: 100, // Since they're verified
+        submittedAt: formatDate(user.createdAt || user.approvedAt || new Date()),
+        languages: user.questionnaireData?.fluentLanguages || [],
+        specializations: user.questionnaireData?.specializations || [],
+        availability: user.questionnaireData?.availability || 'Not specified',
+        motivation: user.questionnaireData?.motivation || user.motivation || 'Not provided',
+        expectedGraduation: user.expectedGraduation || 'Not provided',
+        intent: user.intent || 'translator'
+      };
+      
+      setSelectedStudent(studentData);
+      setActiveTab("student-pool");
+    }
+  };
+
+	return (
 		<div className="min-h-screen bg-gray-50 flex">
 			{/* Sidebar */}
 			<aside
@@ -545,6 +860,8 @@ export default function AdminPage() {
                     <TabsTrigger value="pending_interview">Pending Interview</TabsTrigger>
                     <TabsTrigger value="interviewed">Interviewed</TabsTrigger>
                     <TabsTrigger value="final_approval">Final Approval</TabsTrigger>
+                    <TabsTrigger value="accepted">Accepted</TabsTrigger>
+                    <TabsTrigger value="rejected">Rejected</TabsTrigger>
                   </TabsList>
                   
                   <TabsContent value="all" className="space-y-4">
@@ -563,10 +880,6 @@ export default function AdminPage() {
                                 <div className="flex items-center gap-4 mt-2">
                                   <span className="text-sm font-medium text-blue-600">{candidate.hskLevel}</span>
                                   <span className="text-sm text-gray-500">{candidate.experience} experience</span>
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-sm text-yellow-600">★ {candidate.rating}</span>
-                                    <span className="text-sm text-gray-500">({candidate.completedProjects} projects)</span>
-                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -577,14 +890,30 @@ export default function AdminPage() {
                                 {getFinalStatusBadge(candidate.finalStatus)}
                               </div>
                               <div className="flex gap-2">
-                                {candidate.recruitmentStatus === 'pending_interview' && (
-                                  <Button 
-                                    size="sm" 
-                                    variant="outline"
-                                    onClick={() => scheduleInterview(candidate.id, '2025-01-25')}
-                                  >
-                                    Schedule Interview
-                                  </Button>
+                                {candidate.recruitmentStatus === 'pending_interview' && candidate.finalStatus === 'pending' && (
+                                  <>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => scheduleInterview(candidate.id, '2025-01-25')}
+                                    >
+                                      Schedule Interview
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      className="bg-green-600 hover:bg-green-700"
+                                      onClick={() => finalApproval(candidate.id, true)}
+                                    >
+                                      Accept
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="destructive"
+                                      onClick={() => finalApproval(candidate.id, false)}
+                                    >
+                                      Reject
+                                    </Button>
+                                  </>
                                 )}
                                 {candidate.recruitmentStatus === 'interviewed' && candidate.finalStatus === 'pending' && (
                                   <>
@@ -604,30 +933,67 @@ export default function AdminPage() {
                                     </Button>
                                   </>
                                 )}
-                                {candidate.recruitmentStatus === 'final_approval' && (
-                                  <Button size="sm" variant="outline">
-                                    View Profile
-                                  </Button>
+                                {candidate.recruitmentStatus === 'final_approval' && candidate.finalStatus === 'pending' && (
+                                  <>
+                                    <Button 
+                                      size="sm" 
+                                      className="bg-green-600 hover:bg-green-700"
+                                      onClick={() => finalApproval(candidate.id, true)}
+                                    >
+                                      Accept
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => viewUserProfile(candidate)}
+                                    >
+                                      View Profile
+                                    </Button>
+                                  </>
+                                )}
+                                {(candidate.finalStatus === 'approved' || candidate.recruitmentStatus === 'accepted') && (
+                                  <>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      className="bg-green-50 text-green-700 border-green-200"
+                                      disabled
+                                    >
+                                      ✓ Accepted
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => viewUserProfile(candidate)}
+                                    >
+                                      View Profile
+                                    </Button>
+                                  </>
+                                )}
+                                {candidate.finalStatus === 'rejected' && (
+                                  <>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      className="bg-red-50 text-red-700 border-red-200"
+                                      disabled
+                                    >
+                                      ✗ Rejected
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => viewUserProfile(candidate)}
+                                    >
+                                      View Profile
+                                    </Button>
+                                  </>
                                 )}
                               </div>
                             </div>
                           </div>
                           
-                          <div className="mt-4 pt-4 border-t">
-                            <div className="flex flex-wrap gap-2">
-                              <span className="text-sm font-medium text-gray-600">Specializations:</span>
-                              {candidate.specializations.map((spec: any, index: number) => (
-                                <Badge key={index} variant="secondary" className="text-xs">
-                                  {spec}
-                                </Badge>
-                              ))}
-                            </div>
-                            {candidate.interviewScheduled && (
-                              <p className="text-sm text-gray-600 mt-2">
-                                Interview: {candidate.interviewScheduled}
-                              </p>
-                            )}
-                          </div>
+                          
                         </CardContent>
                       </Card>
                     ))}
@@ -719,15 +1085,264 @@ export default function AdminPage() {
                                   </div>
                                 </div>
                               </div>
-                              <Button variant="outline">
-                                View Full Profile
-                              </Button>
+                              <div className="flex items-center space-x-2">
+                                <Button 
+                                  variant="outline"
+                                  onClick={() => finalApproval(candidate.id, candidate.name)}
+                                  className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                                >
+                                  ✓ Accept & Verify
+                                </Button>
+                                <Button variant="outline">
+                                  View Full Profile
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                    ))}
+                  </TabsContent>
+                  
+                  <TabsContent value="accepted" className="space-y-4">
+                    {(() => {
+                      const acceptedCandidates = recruitmentCandidates.filter((c: any) => c.finalStatus === 'approved');
+                      console.log("🎯 Accepted tab - candidates with finalStatus === 'approved':", acceptedCandidates.map(c => ({ name: c.name, finalStatus: c.finalStatus, recruitmentStatus: c.recruitmentStatus })));
+                      return acceptedCandidates;
+                    })()
+                      .map((candidate: any) => (
+                        <Card key={candidate.id} className="hover:shadow-lg transition-shadow border-green-200">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-4">
+                                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                                  <CheckCircle className="h-8 w-8 text-green-600" />
+                                </div>
+                                <div>
+                                  <h3 className="font-semibold text-navy-800">{candidate.name}</h3>
+                                  <p className="text-sm text-gray-600">{candidate.university}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <Badge className="bg-green-100 text-green-800">Accepted & Verified</Badge>
+                                    <span className="text-sm text-green-600">HSK {candidate.hskLevel}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => viewUserProfile(candidate)}
+                                  className="bg-green-50 text-green-700 border-green-200"
+                                >
+                                  View Profile
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                    ))}
+                  </TabsContent>
+                  
+                  <TabsContent value="rejected" className="space-y-4">
+                    {recruitmentCandidates
+                      .filter((c: any) => c.finalStatus === 'rejected')
+                      .map((candidate: any) => (
+                        <Card key={candidate.id} className="hover:shadow-lg transition-shadow border-red-200">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-4">
+                                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                                  <XCircle className="h-8 w-8 text-red-600" />
+                                </div>
+                                <div>
+                                  <h3 className="font-semibold text-navy-800">{candidate.name}</h3>
+                                  <p className="text-sm text-gray-600">{candidate.university}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <Badge variant="destructive">Rejected</Badge>
+                                    <span className="text-sm text-gray-500">HSK {candidate.hskLevel}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => viewUserProfile(candidate)}
+                                  className="bg-red-50 text-red-700 border-red-200"
+                                >
+                                  View Profile
+                                </Button>
+                              </div>
                             </div>
                           </CardContent>
                         </Card>
                     ))}
                   </TabsContent>
                 </Tabs>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {activeTab === "verified-users" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-navy-800">Verified Users</h1>
+                <p className="text-gray-600">Manage verified and approved translators/tour guides</p>
+              </div>
+              <Button variant="outline" className="flex items-center gap-2">
+                <Download className="h-4 w-4" />
+                Export Users
+              </Button>
+            </div>
+
+            {/* Verified Users Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <UserCheck className="h-8 w-8 text-green-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Total Verified</p>
+                      <p className="text-2xl font-bold text-gray-900">{verifiedUsers.length}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Users className="h-8 w-8 text-blue-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Translators</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {verifiedUsers.filter((user: any) => user.intent === 'translator').length}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <Handshake className="h-8 w-8 text-purple-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Tour Guides</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {verifiedUsers.filter((user: any) => user.intent === 'tour_guide').length}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Verified Users Table */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Verified Users</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {verifiedUsers.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <UserCheck className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Verified Users Yet</h3>
+                    <p className="text-gray-500">Users will appear here after final approval in recruitment</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">University</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">HSK Level</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rating</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {verifiedUsers.map((user: any) => (
+                          <tr key={user.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                                  <UserCheck className="h-5 w-5 text-green-600" />
+                                </div>
+                                <div className="ml-4">
+                                  <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                                  <div className="text-xs text-gray-500">ID: {user.id}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{user.email}</div>
+                              <div className="text-xs text-gray-500">{user.whatsapp}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.university}</td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {user.intent === 'tour_guide' ? (
+                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                  🗺️ Tour Guide
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                                  🔤 Translator
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {user.hskLevel ? (
+                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                  {user.hskLevel}
+                                </Badge>
+                              ) : (
+                                <span className="text-xs text-gray-400">Not set</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              <div className="flex items-center">
+                                <span className="text-yellow-400">★</span>
+                                <span className="ml-1">{user.rating || '4.5'}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <Badge className="bg-green-500">Verified</Badge>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => viewUserProfile(user)}
+                              >
+                                View Profile
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="text-red-600 hover:text-red-700"
+                                onClick={() => revokeVerification(user.id, user.name)}
+                              >
+                                Revoke
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -790,7 +1405,7 @@ export default function AdminPage() {
                           </div>
                           <div>
                             <label className="text-sm font-medium text-gray-600">Expected Price/Day</label>
-                            <p className="text-sm text-navy-800">¥{selectedStudent.pricePerDay}</p>
+                            <p className="text-sm text-navy-800">Rp{selectedStudent.pricePerDay}</p>
                           </div>
                           <div>
                             <label className="text-sm font-medium text-gray-600">Experience</label>
@@ -828,10 +1443,8 @@ export default function AdminPage() {
                               )}
                             </div>
                           </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-600">Availability</label>
-                            <p className="text-sm text-navy-800">{selectedStudent.availability}</p>
-                          </div>
+                          
+                         
                           <div>
                             <label className="text-sm font-medium text-gray-600">Submitted</label>
                             <p className="text-sm text-navy-800">{selectedStudent.submittedAt}</p>
@@ -856,6 +1469,7 @@ export default function AdminPage() {
                     <Tabs defaultValue="documents" className="space-y-4">
                       <TabsList>
                         <TabsTrigger value="documents">General Details</TabsTrigger>
+                        <TabsTrigger value="schedule">Schedule</TabsTrigger>
                         <TabsTrigger value="activation">Activation</TabsTrigger>
                       </TabsList>
                       
@@ -865,52 +1479,95 @@ export default function AdminPage() {
                             <CardTitle className="flex items-center justify-between">
                               Document Verification
                               <Badge 
-                                variant={safeProgress(selectedStudent.verificationProgress) === 100 ? "default" : "secondary"}
-                                className={safeProgress(selectedStudent.verificationProgress) === 100 ? "bg-green-100 text-green-800" : ""}
+                                variant={
+                                  safeProgress(selectedStudent.verificationProgress) === 100 ? "default" : 
+                                  safeProgress(selectedStudent.verificationProgress) >= 80 ? "secondary" : "outline"
+                                }
+                                className={
+                                  safeProgress(selectedStudent.verificationProgress) === 100 
+                                    ? "bg-green-100 text-green-800" 
+                                    : safeProgress(selectedStudent.verificationProgress) >= 80 
+                                    ? "bg-blue-100 text-blue-800" 
+                                    : ""
+                                }
                               >
-                                {safeProgress(selectedStudent.verificationProgress)}% Complete
+                                {safeProgress(selectedStudent.verificationProgress) === 100 
+                                  ? "✅ Activated by Admin" 
+                                  : safeProgress(selectedStudent.verificationProgress) >= 80 
+                                  ? "📋 Ready for Review" 
+                                  : `${safeProgress(selectedStudent.verificationProgress)}% Complete`
+                                }
                               </Badge>
                             </CardTitle>
                           </CardHeader>
                           <CardContent className="space-y-6">
                             {/* HSK Certificate */}
-                            <div className="flex items-center justify-between p-4 border rounded-lg">
-                              <div className="flex items-center gap-3">
-                                <FileText className="h-8 w-8 text-blue-600" />
-                                <div>
-                                  <h4 className="font-medium">HSK Certificate</h4>
-                                  <div className="flex items-center text-sm text-gray-600">
-                                    {getDocumentAvailability(selectedStudent.hskCertificate.url)}
-                                    <span>Language proficiency certification</span>
+                            <div className="space-y-4 p-4 border rounded-lg">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <FileText className="h-8 w-8 text-blue-600" />
+                                  <div>
+                                    <h4 className="font-medium">HSK Certificate</h4>
+                                    <div className="flex items-center text-sm text-gray-600">
+                                      {getDocumentAvailability(selectedStudent.hskCertificate.url)}
+                                      <span>Language proficiency certification</span>
+                                    </div>
                                   </div>
                                 </div>
+                                <div className="flex items-center gap-3">
+                                  {getDocumentStatus(selectedStudent.hskCertificate.status)}
+                                  <Select
+                                    value={selectedStudent.hskCertificate.status}
+                                    onValueChange={(value) => updateDocumentStatus(selectedStudent.id, 'HSK Certificate', value)}
+                                    disabled={updateDocumentMutation.isPending}
+                                  >
+                                    <SelectTrigger className="w-36">
+                                      <SelectValue placeholder="Select status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="pending">Pending</SelectItem>
+                                      <SelectItem value="approved">Approved</SelectItem>
+                                      <SelectItem value="rejected">Rejected</SelectItem>
+                                      <SelectItem value="needs_changes">Needs Changes</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => viewDocument(selectedStudent.hskCertificate.url, 'HSK Certificate')}
+                                    disabled={!selectedStudent.hskCertificate.url}
+                                  >
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    View
+                                  </Button>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-3">
-                                {getDocumentStatus(selectedStudent.hskCertificate.status)}
+                              
+                              {/* HSK Level Selection */}
+                              <div className="flex items-center justify-between bg-blue-50 p-3 rounded-lg">
+                                <div>
+                                  <h5 className="font-medium text-sm">HSK Level</h5>
+                                  <p className="text-xs text-gray-600">Select HSK level after reviewing certificate</p>
+                                </div>
                                 <Select
-                                  value={selectedStudent.hskCertificate.status}
-                                  onValueChange={(value) => updateDocumentStatus(selectedStudent.id, 'HSK Certificate', value)}
-                                  disabled={updateDocumentMutation.isPending}
+                                  value={selectedStudent.hskLevel || ""}
+                                  onValueChange={(value) => updateHskLevel(selectedStudent.id, value)}
                                 >
-                                  <SelectTrigger className="w-36">
-                                    <SelectValue placeholder="Select status" />
+                                  <SelectTrigger className="w-32">
+                                    <SelectValue placeholder="HSK Level" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="pending">Pending</SelectItem>
-                                    <SelectItem value="approved">Approved</SelectItem>
-                                    <SelectItem value="rejected">Rejected</SelectItem>
-                                    <SelectItem value="needs_changes">Needs Changes</SelectItem>
+                                    <SelectItem value="HSK1">HSK 1</SelectItem>
+                                    <SelectItem value="HSK2">HSK 2</SelectItem>
+                                    <SelectItem value="HSK3">HSK 3</SelectItem>
+                                    <SelectItem value="HSK4">HSK 4</SelectItem>
+                                    <SelectItem value="HSK5">HSK 5</SelectItem>
+                                    <SelectItem value="HSK6">HSK 6</SelectItem>
+                                    <SelectItem value="HSK7">HSK 7</SelectItem>
+                                    <SelectItem value="HSK8">HSK 8</SelectItem>
+                                    <SelectItem value="HSK9">HSK 9</SelectItem>
                                   </SelectContent>
                                 </Select>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={() => viewDocument(selectedStudent.hskCertificate.url, 'HSK Certificate')}
-                                  disabled={!selectedStudent.hskCertificate.url}
-                                >
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  View
-                                </Button>
                               </div>
                             </div>
 
@@ -954,6 +1611,199 @@ export default function AdminPage() {
                                 </Button>
                               </div>
                             </div>
+
+                            {/* CV/Resume */}
+                            <div className="flex items-center justify-between p-4 border rounded-lg">
+                              <div className="flex items-center gap-3">
+                                <FileText className="h-8 w-8 text-purple-600" />
+                                <div>
+                                  <h4 className="font-medium">CV/Resume</h4>
+                                  <div className="flex items-center text-sm text-gray-600">
+                                    {getDocumentAvailability(selectedStudent.cvDocument?.url)}
+                                    <span>Curriculum vitae or resume</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {getDocumentStatus(selectedStudent.cvDocument?.status || 'pending')}
+                                <Select
+                                  value={selectedStudent.cvDocument?.status || 'pending'}
+                                  onValueChange={(value) => updateDocumentStatus(selectedStudent.id, 'CV/Resume', value)}
+                                  disabled={updateDocumentMutation.isPending}
+                                >
+                                  <SelectTrigger className="w-36">
+                                    <SelectValue placeholder="Select status" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="pending">Pending</SelectItem>
+                                    <SelectItem value="approved">Approved</SelectItem>
+                                    <SelectItem value="rejected">Rejected</SelectItem>
+                                    <SelectItem value="needs_changes">Needs Changes</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => viewDocument(selectedStudent.cvDocument?.url, 'CV/Resume')}
+                                  disabled={!selectedStudent.cvDocument?.url}
+                                >
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </TabsContent>
+                      
+                      <TabsContent value="schedule" className="space-y-4">
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                              <Calendar className="h-5 w-5" />
+                              Availability Schedule
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            {selectedStudent.availability && selectedStudent.availability.schedule ? (
+                              <div className="space-y-4">
+                                {/* Summary */}
+                                <div className="bg-blue-50 p-4 rounded-lg">
+                                  <h4 className="font-medium text-blue-900 mb-2">Schedule Overview</h4>
+                                  <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                      <span className="text-blue-700">Total Available Days:</span>
+                                      <span className="font-medium ml-2">
+                                        {selectedStudent.availability.schedule.filter((s: any) => s.isAvailable).length} days
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-blue-700">Last Updated:</span>
+                                      <span className="font-medium ml-2">
+                                        {selectedStudent.availability.lastUpdated ? 
+                                          new Date(selectedStudent.availability.lastUpdated).toLocaleDateString('id-ID') : 
+                                          'Not set'
+                                        }
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Schedule Grid */}
+                                <div className="border rounded-lg overflow-hidden">
+                                  <div className="bg-gray-50 p-3 border-b">
+                                    <h4 className="font-medium">Available Dates</h4>
+                                  </div>
+                                  <div className="p-4">
+                                    {(() => {
+                                      // Get all available dates from the schedule and sort them
+                                      const availableDates = selectedStudent.availability.schedule
+                                        .filter((s: any) => s.isAvailable)
+                                        .map((s: any) => s.date)
+                                        .sort();
+                                      
+                                      if (availableDates.length === 0) {
+                                        return (
+                                          <div className="text-center py-8 text-gray-500">
+                                            No available dates set yet
+                                          </div>
+                                        );
+                                      }
+                                      
+                                      return (
+                                        <div className="space-y-4">
+                                          <div className="text-sm text-gray-600 text-center">
+                                            {availableDates.length} available dates configured
+                                          </div>
+                                          
+                                          <div className="grid grid-cols-7 gap-2 text-sm">
+                                            {/* Calendar-style grid showing available dates */}
+                                            {availableDates.slice(0, 21).map((dateStr: string) => {
+                                              const date = new Date(dateStr);
+                                              const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                                              const dayName = dayNames[date.getDay()];
+                                              
+                                              return (
+                                                <div key={dateStr} className="bg-green-50 border border-green-200 rounded p-3 text-center">
+                                                  <div className="font-medium text-green-800">{dayName}</div>
+                                                  <div className="text-sm text-green-600">
+                                                    {date.toLocaleDateString('en-US', { 
+                                                      month: 'short', 
+                                                      day: 'numeric' 
+                                                    })}
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                          
+                                          {availableDates.length > 21 && (
+                                            <div className="text-center text-sm text-gray-500">
+                                              ... and {availableDates.length - 21} more dates
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                </div>
+
+                                {/* Recurring Patterns */}
+                                {selectedStudent.availability.recurringPatterns && 
+                                 selectedStudent.availability.recurringPatterns.length > 0 && (
+                                  <div className="border rounded-lg">
+                                    <div className="bg-gray-50 p-3 border-b">
+                                      <h4 className="font-medium">Recurring Patterns</h4>
+                                    </div>
+                                    <div className="p-4 space-y-2">
+                                      {selectedStudent.availability.recurringPatterns.map((pattern: any, index: number) => (
+                                        <div key={index} className="flex items-center justify-between p-2 bg-blue-50 rounded">
+                                          <span className="text-sm">
+                                            {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][pattern.dayOfWeek]}
+                                          </span>
+                                          <span className="text-sm text-gray-600">
+                                            Always available on {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][pattern.dayOfWeek]}s
+                                          </span>
+                                          <Badge variant={pattern.isActive ? "default" : "secondary"}>
+                                            {pattern.isActive ? 'Active' : 'Inactive'}
+                                          </Badge>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Unavailable Periods */}
+                                {selectedStudent.availability.unavailablePeriods && 
+                                 selectedStudent.availability.unavailablePeriods.length > 0 && (
+                                  <div className="border rounded-lg">
+                                    <div className="bg-gray-50 p-3 border-b">
+                                      <h4 className="font-medium">Unavailable Periods</h4>
+                                    </div>
+                                    <div className="p-4 space-y-2">
+                                      {selectedStudent.availability.unavailablePeriods.map((period: any, index: number) => (
+                                        <div key={index} className="flex items-center justify-between p-2 bg-red-50 rounded">
+                                          <span className="text-sm">
+                                            {new Date(period.startDate).toLocaleDateString('id-ID')} - {new Date(period.endDate).toLocaleDateString('id-ID')}
+                                          </span>
+                                          <span className="text-sm text-gray-600">
+                                            {period.reason || 'No reason provided'}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-center py-8">
+                                <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                                <p className="text-gray-500">No availability schedule set</p>
+                                <p className="text-sm text-gray-400 mt-1">
+                                  User hasn't configured their availability yet
+                                </p>
+                              </div>
+                            )}
                           </CardContent>
                         </Card>
                       </TabsContent>
@@ -987,6 +1837,13 @@ export default function AdminPage() {
                                   }
                                 </div>
                                 <div className="flex items-center justify-between">
+                                  <span>CV/Resume:</span>
+                                  {selectedStudent.cvDocument?.url ? 
+                                    getDocumentStatus(selectedStudent.cvDocument.status) : 
+                                    <XCircle className="h-4 w-4 text-red-600" />
+                                  }
+                                </div>
+                                <div className="flex items-center justify-between">
                                   <span>Overall Progress:</span>
                                   <span className="font-medium">{safeProgress(selectedStudent.verificationProgress)}%</span>
                                 </div>
@@ -1012,11 +1869,14 @@ export default function AdminPage() {
                               </Button>
                               <Button 
                                 variant="outline"
-                                onClick={() => updateStudentStatus(selectedStudent.id, 'needs_changes')}
-                                disabled={updateStatusMutation.isPending || selectedStudent.status === 'needs_changes'}
+                                onClick={() => {
+                                  setSelectedCandidate(selectedStudent);
+                                  setRequestChangesModalOpen(true);
+                                }}
+                                disabled={updateStatusMutation.isPending}
                               >
                                 <AlertCircle className="h-4 w-4 mr-2" />
-                                {selectedStudent.status === 'needs_changes' ? 'Changes Requested' : updateStatusMutation.isPending ? 'Updating...' : 'Request Changes'}
+                                Request Changes
                               </Button>
                             </div>
                             
@@ -1183,8 +2043,23 @@ export default function AdminPage() {
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">€{student.pricePerDay || 'N/A'}/day</div>
-                                <div className="text-sm text-gray-500">{student.availability}</div>
+                                <div className="text-sm text-gray-900">Rp {student.pricePerDay || 'N/A'} /day</div>
+                                <div className="text-sm text-gray-500">
+                                  {student.availabilityText === 'Will be set up in dashboard' || 
+                                   (Array.isArray(student.availabilityText) && student.availabilityText.includes('Will be set up in dashboard'))
+                                    ? (
+                                      <div className="flex items-center gap-1">
+                                        <Calendar className="h-3 w-3" />
+                                        {(student as any).availability && 
+                                         (student as any).availability.schedule && 
+                                         (student as any).availability.schedule.length > 0 
+                                          ? '✅ Calendar Set' 
+                                          : '⏳ Calendar Pending'
+                                        }
+                                      </div>
+                                    ) : student.availabilityText || 'Not specified'
+                                  }
+                                </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 {getStatusBadge(student.status || 'pending')}
@@ -1293,26 +2168,118 @@ export default function AdminPage() {
 							</CardHeader>
 							<CardContent>
 								<div className="space-y-4">
-									<div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-										<div>
-											<p className="font-medium">Pendaftaran Baru</p>
-											<p className="text-sm text-gray-600">3 penerjemah baru mendaftar hari ini</p>
+									{recentActivities && recentActivities.length > 0 ? (
+										recentActivities.map((activity) => (
+											<div key={activity.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+												<div>
+													<p className="font-medium">{getActivityTitle(activity.type)}</p>
+													<p className="text-sm text-gray-600">{activity.message}</p>
+													<p className="text-xs text-gray-400 mt-1">
+														{new Date(activity.timestamp).toLocaleDateString('id-ID', {
+															day: 'numeric',
+															month: 'short',
+															hour: '2-digit',
+															minute: '2-digit'
+														})}
+													</p>
+												</div>
+												{getActivityBadge(activity.status)}
+											</div>
+										))
+									) : (
+										<div className="text-center text-gray-500 py-8">
+											<p>Belum ada aktivitas terbaru</p>
 										</div>
-										<Badge variant="secondary">Baru</Badge>
-									</div>
-									<div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-										<div>
-											<p className="font-medium">Verifikasi Selesai</p>
-											<p className="text-sm text-gray-600">2 penerjemah telah diverifikasi</p>
-										</div>
-										<Badge className="bg-green-100 text-green-800">Selesai</Badge>
-									</div>
+									)}
 								</div>
 							</CardContent>
 						</Card>
 					</>
 				)}
 			</main>
+
+			{/* Request Changes Modal */}
+			<Dialog open={requestChangesModalOpen} onOpenChange={setRequestChangesModalOpen}>
+				<DialogContent className="sm:max-w-md">
+					<DialogHeader>
+						<DialogTitle>Request Document Changes</DialogTitle>
+						<DialogDescription>
+							Select which documents need to be resubmitted by {selectedCandidate?.name}
+						</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-4">
+						<div className="space-y-3">
+							<Label className="text-sm font-medium">Documents requiring changes:</Label>
+							<div className="space-y-2">
+								<div className="flex items-center space-x-2">
+									<Checkbox
+										id="hsk"
+										checked={selectedChanges.includes('hsk')}
+										onCheckedChange={(checked: boolean) => {
+											if (checked) {
+												setSelectedChanges(prev => [...prev, 'hsk']);
+											} else {
+												setSelectedChanges(prev => prev.filter(item => item !== 'hsk'));
+											}
+										}}
+									/>
+									<Label htmlFor="hsk" className="text-sm">HSK Certificate</Label>
+								</div>
+								<div className="flex items-center space-x-2">
+									<Checkbox
+										id="studentId"
+										checked={selectedChanges.includes('studentId')}
+										onCheckedChange={(checked: boolean) => {
+											if (checked) {
+												setSelectedChanges(prev => [...prev, 'studentId']);
+											} else {
+												setSelectedChanges(prev => prev.filter(item => item !== 'studentId'));
+											}
+										}}
+									/>
+									<Label htmlFor="studentId" className="text-sm">Student ID Document</Label>
+								</div>
+							</div>
+						</div>
+						<div className="space-y-2">
+							<Label htmlFor="message" className="text-sm font-medium">Additional Message (Optional)</Label>
+							<Textarea
+								id="message"
+								placeholder="Provide specific feedback about what needs to be changed..."
+								value={changeMessage}
+								onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setChangeMessage(e.target.value)}
+								className="min-h-[80px]"
+							/>
+						</div>
+					</div>
+					<DialogFooter className="flex justify-end space-x-2">
+						<Button
+							variant="outline"
+							onClick={() => {
+								setRequestChangesModalOpen(false);
+								setSelectedChanges([]);
+								setChangeMessage("");
+							}}
+						>
+							Cancel
+						</Button>
+						<Button
+							onClick={() => {
+								if (selectedCandidate && selectedChanges.length > 0) {
+									requestChangesMutation.mutate({
+										studentId: selectedCandidate.id,
+										changes: selectedChanges,
+										message: changeMessage
+									});
+								}
+							}}
+							disabled={selectedChanges.length === 0 || requestChangesMutation.isPending}
+						>
+							{requestChangesMutation.isPending ? 'Sending...' : 'Send Request'}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

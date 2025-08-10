@@ -16,7 +16,8 @@ import {
   Upload,
   FileText,
   Clock,
-  Heart
+  Heart,
+  Calendar
 } from "lucide-react";
 
 interface TranslatorAnswers {
@@ -115,7 +116,7 @@ export default function RoleQuestionnaire({ selectedRole, onComplete, onBack }: 
     fluentLanguages: [],
     experience: '',
     specializations: [],
-    availability: '',
+    availability: 'Will be set up in dashboard', // Default value
     motivation: ''
   });
 
@@ -126,7 +127,7 @@ export default function RoleQuestionnaire({ selectedRole, onComplete, onBack }: 
     languages: [],
     culturalKnowledge: '',
     publicSpeaking: '',
-    availability: [],
+    availability: ['Will be set up in dashboard'], // Default value
     motivation: ''
   });
 
@@ -153,7 +154,6 @@ export default function RoleQuestionnaire({ selectedRole, onComplete, onBack }: 
   const isTranslatorValid = translatorAnswers.fluentLanguages.length > 0 && 
                            translatorAnswers.experience.trim() !== '' && 
                            translatorAnswers.specializations.length > 0 && 
-                           translatorAnswers.availability.trim() !== '' && 
                            translatorAnswers.motivation.trim() !== '';
 
   const isTourGuideValid = tourGuideAnswers.experience.trim() !== '' && 
@@ -161,7 +161,6 @@ export default function RoleQuestionnaire({ selectedRole, onComplete, onBack }: 
                           tourGuideAnswers.languages.length > 0 && 
                           tourGuideAnswers.culturalKnowledge !== '' && 
                           tourGuideAnswers.publicSpeaking !== '' && 
-                          tourGuideAnswers.availability.length > 0 && 
                           tourGuideAnswers.motivation.trim() !== '';
 
   const shouldShowTranslator = selectedRole === 'translator';
@@ -256,19 +255,7 @@ export default function RoleQuestionnaire({ selectedRole, onComplete, onBack }: 
               )}
             </div>
 
-            {/* Availability */}
-            <div className="space-y-2">
-              <Label htmlFor="translator-availability" className="text-base font-medium">
-                Ketersediaan (hari/waktu per minggu) *
-              </Label>
-              <Textarea
-                id="translator-availability"
-                placeholder="Contoh: Senin-Jumat sore setelah kuliah, Weekend full day, atau sesuai jadwal yang fleksibel..."
-                value={translatorAnswers.availability}
-                onChange={(e) => setTranslatorAnswers(prev => ({ ...prev, availability: e.target.value }))}
-                className="min-h-[80px]"
-              />
-            </div>
+         
 
             {/* Motivation */}
             <div className="space-y-2">
@@ -438,36 +425,7 @@ export default function RoleQuestionnaire({ selectedRole, onComplete, onBack }: 
               </RadioGroup>
             </div>
 
-            {/* Availability */}
-            <div className="space-y-3">
-              <Label className="text-base font-medium">Ketersediaan *</Label>
-              <div className="grid grid-cols-2 gap-3">
-                {AVAILABILITY_OPTIONS.map(option => (
-                  <div key={option} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={option}
-                      checked={tourGuideAnswers.availability.includes(option)}
-                      onCheckedChange={() => 
-                        toggleArrayItem(
-                          tourGuideAnswers.availability, 
-                          option, 
-                          (items) => setTourGuideAnswers(prev => ({ ...prev, availability: items }))
-                        )
-                      }
-                    />
-                    <Label htmlFor={option} className="text-sm">{option}</Label>
-                  </div>
-                ))}
-              </div>
-              {tourGuideAnswers.availability.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {tourGuideAnswers.availability.map(avail => (
-                    <Badge key={avail} variant="secondary">{avail}</Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-
+       
             {/* Motivation */}
             <div className="space-y-2">
               <Label htmlFor="guide-motivation" className="text-base font-medium">

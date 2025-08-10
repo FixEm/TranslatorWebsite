@@ -96,7 +96,11 @@ export default function ProfileModal({ provider, isOpen, onClose }: ProfileModal
                 <h4 className="text-lg font-semibold text-navy-800 mb-3">Layanan yang Ditawarkan</h4>
                 <div className="flex flex-wrap gap-2">
                   {(provider.services as string[]).map((service) => (
-                    <Badge key={service} variant="secondary" className="bg-navy-100 text-navy-800">
+                    <Badge
+                      key={service}
+                      variant="secondary"
+                      className="bg-navy-100 text-navy-800"
+                    >
                       {getServiceLabel(service)}
                     </Badge>
                   ))}

@@ -473,6 +473,33 @@ router.post('/applications/:id/upload/student-id', upload.single('studentId'), a
     // Update application with student ID document
     await storage.updateStudentDocument(id, downloadURL);
     
+    // Clear change request status for student ID if it exists
+    try {
+      const application = await storage.getApplication(id);
+      if (application && (application as any).verificationSteps) {
+        const updatedVerificationSteps = {
+          ...(application as any).verificationSteps,
+          studentIdStatus: 'pending', // Reset to pending for admin review
+          studentIdUploaded: true
+        };
+        await storage.updateApplicationField(id, 'verificationSteps', updatedVerificationSteps);
+        
+        // Clear change requests for studentId if they exist
+        if ((application as any).changeRequests) {
+          const updatedChangeRequests = {
+            ...(application as any).changeRequests,
+            requests: (application as any).changeRequests.requests.filter((req: any) => req.type !== 'studentId')
+          };
+          await storage.updateApplicationField(id, 'changeRequests', updatedChangeRequests);
+        }
+        
+        console.log('✅ Student ID change request status cleared');
+      }
+    } catch (error) {
+      console.error('⚠️ Error clearing change request status:', error);
+      // Continue anyway - the upload was successful
+    }
+    
     res.json({
       success: true,
       message: 'Dokumen kartu mahasiswa berhasil diunggah',
@@ -524,6 +551,33 @@ router.post('/applications/:id/upload/hsk', upload.single('hskCertificate'), asy
     
     await storage.updateHskCertificate(id, downloadURL);
     
+    // Clear change request status for HSK if it exists
+    try {
+      const application = await storage.getApplication(id);
+      if (application && (application as any).verificationSteps) {
+        const updatedVerificationSteps = {
+          ...(application as any).verificationSteps,
+          hskStatus: 'pending', // Reset to pending for admin review
+          hskUploaded: true
+        };
+        await storage.updateApplicationField(id, 'verificationSteps', updatedVerificationSteps);
+        
+        // Clear change requests for HSK if they exist
+        if ((application as any).changeRequests) {
+          const updatedChangeRequests = {
+            ...(application as any).changeRequests,
+            requests: (application as any).changeRequests.requests.filter((req: any) => req.type !== 'hsk')
+          };
+          await storage.updateApplicationField(id, 'changeRequests', updatedChangeRequests);
+        }
+        
+        console.log('✅ HSK change request status cleared');
+      }
+    } catch (error) {
+      console.error('⚠️ Error clearing HSK change request status:', error);
+      // Continue anyway - the upload was successful
+    }
+    
     res.json({
       success: true,
       message: 'Sertifikat HSK berhasil diunggah',
@@ -532,6 +586,65 @@ router.post('/applications/:id/upload/hsk', upload.single('hskCertificate'), asy
   } catch (error) {
     console.error('Error uploading HSK certificate:', error);
     res.status(500).json({ error: 'Gagal mengunggah sertifikat' });
+  }
+});
+
+// Upload CV document
+router.post('/applications/:id/upload/cv', upload.single('cvDocument'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'Tidak ada file CV yang diunggah' });
+    }
+
+    // Upload to Firebase Storage using Admin SDK
+    console.log('📄 Starting CV upload for application:', id);
+    
+    const fileName = `${id}-${Date.now()}-${req.file.originalname}`;
+    const fileRef = firebaseStorage.bucket().file(`cvs/${fileName}`);
+
+    const metadata = {
+      metadata: {
+        applicationId: id,
+        uploadedAt: new Date().toISOString(),
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype
+      }
+    };
+
+    // Upload the file
+    await fileRef.save(req.file.buffer, {
+      metadata: metadata,
+      resumable: false
+    });
+
+    // Get the download URL
+    const [downloadURL] = await fileRef.getSignedUrl({
+      action: 'read',
+      expires: '12-31-2030' // Far future expiry date
+    });
+
+    console.log('✅ CV uploaded successfully:', downloadURL);
+
+    // Update the application in Firestore
+    try {
+      await storage.updateApplicationField(id, 'cvDocument', downloadURL);
+      await storage.updateApplicationField(id, 'verificationSteps.cvUploaded', true);
+      console.log('✅ Application updated with CV info');
+    } catch (updateError) {
+      console.error('⚠️ Error updating application (file uploaded successfully):', updateError);
+      // Continue anyway - the upload was successful
+    }
+    
+    res.json({
+      success: true,
+      message: 'CV berhasil diunggah',
+      cvUrl: downloadURL
+    });
+  } catch (error) {
+    console.error('Error uploading CV:', error);
+    res.status(500).json({ error: 'Gagal mengunggah CV' });
   }
 });
 
