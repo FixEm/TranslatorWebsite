@@ -4,6 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { 
@@ -14,7 +17,9 @@ import {
   Upload, 
   FileText, 
   Star,
-  Calendar 
+  Calendar,
+  Video,
+  ExternalLink
 } from "lucide-react";
 
 interface VerificationStep {
@@ -22,6 +27,7 @@ interface VerificationStep {
   studentIdUploaded: boolean;
   hskUploaded: boolean;
   cvUploaded: boolean;
+  introVideoUploaded: boolean;
   availabilitySet: boolean;
   adminApproved: boolean;
 }
@@ -41,19 +47,23 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
     studentIdUploaded: false,
     hskUploaded: false,
     cvUploaded: false,
+    introVideoUploaded: false,
     availabilitySet: false,
     adminApproved: false,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [videoUrl, setVideoUrl] = useState("");
+  const [showVideoInput, setShowVideoInput] = useState(false);
 
   // Calculate completeness score with safe handling
   const completenessScore = (() => {
     try {
       const points = {
-        emailVerified: 30,
-        studentIdUploaded: 25,
+        emailVerified: 20,
+        studentIdUploaded: 15,
         hskUploaded: 20,
-        cvUploaded: 15,
+        cvUploaded: 20,
+        introVideoUploaded: 15,
         availabilitySet: 10,
         adminApproved: 0  // Admin approval required for activation but doesn't add points
       };
@@ -64,6 +74,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
         studentIdUploaded: false,
         hskUploaded: false,
         cvUploaded: false,
+        introVideoUploaded: false,
         availabilitySet: false,
         adminApproved: false,
       };
@@ -88,13 +99,32 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
   const isAccountActivated = verificationSteps.adminApproved;
   
   // Check if ready for admin review
-  const isReadyForReview = completenessScore >= 80 && !verificationSteps.adminApproved;
+  const isReadyForReview = completenessScore == 100 && !verificationSteps.adminApproved;
+
+  // Check if application is rejected and locked
+  const isRejectedAndLocked = () => {
+    if (!applicationData) return false;
+    
+    const appData = applicationData as any;
+    if (appData.recruitmentStatus !== 'rejected' && appData.status !== 'rejected') return false;
+    
+    // Check if 3 months have passed since rejection
+    const rejectionDate = appData.rejectedAt || appData.updatedAt;
+    if (!rejectionDate) return true; // If no date, assume locked
+    
+    const rejectedAt = new Date(rejectionDate);
+    const threeMonthsLater = new Date(rejectedAt);
+    threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
+    
+    return new Date() < threeMonthsLater;
+  };
 
   useEffect(() => {
     console.log('🔍 VerificationStatus: Processing applicationData:', applicationData);
     
     if (applicationData?.verificationSteps) {
       console.log('🔍 VerificationStatus: Found verificationSteps:', applicationData.verificationSteps);
+      console.log('🔍 VerificationStatus: recruitmentStatus:', applicationData.recruitmentStatus);
       
       const steps = {
         emailVerified: Boolean(user?.emailVerified ?? applicationData.verificationSteps.emailVerified),
@@ -104,10 +134,12 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
           applicationData.verificationSteps.hskStatus !== 'changes_requested'),
         cvUploaded: Boolean(applicationData.verificationSteps.cvUploaded && 
           applicationData.verificationSteps.cvStatus !== 'changes_requested'),
+        introVideoUploaded: Boolean(applicationData.verificationSteps.introVideoUploaded),
         availabilitySet: Boolean(applicationData.availability && 
           applicationData.availability.schedule && 
           applicationData.availability.schedule.length > 0),
-        adminApproved: Boolean(applicationData.verificationSteps.adminApproved),
+        // Check both adminApproved in verificationSteps AND recruitmentStatus === 'approved'
+        adminApproved: Boolean(applicationData.verificationSteps.adminApproved || applicationData.recruitmentStatus === 'approved'),
       };
       
       console.log('🔍 VerificationStatus: Setting steps:', steps);
@@ -126,7 +158,8 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
 
   // Periodically check email verification status
   useEffect(() => {
-    if (!user?.emailVerified && user?.email) {
+    // Only poll if email is not verified yet and we have an email
+    if (!user?.emailVerified && !verificationSteps.emailVerified && user?.email) {
       const checkEmailVerification = async () => {
         try {
           const response = await fetch(`/api/auth/verify-status?email=${user.email}`);
@@ -153,13 +186,73 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
         }
       };
 
-      // Check immediately and then every 10 seconds
+      // Check immediately and then every 30 seconds (reduced frequency)
       checkEmailVerification();
-      const interval = setInterval(checkEmailVerification, 10000);
+      const interval = setInterval(checkEmailVerification, 30000);
       
       return () => clearInterval(interval);
     }
   }, [user?.emailVerified, user?.email, verificationSteps.emailVerified, toast]);
+
+  const handleVideoUpload = async () => {
+    if (!videoUrl.trim()) {
+      toast({
+        title: "Error",
+        description: "Silakan masukkan link Google Drive untuk video perkenalan.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!applicationData?.id) {
+      toast({
+        title: "Error",
+        description: "Tidak dapat menemukan data aplikasi. Silakan refresh halaman atau logout dan login kembali.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/applications/${applicationData.id}/upload/intro-video`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ videoUrl: videoUrl.trim() }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Upload failed');
+      }
+
+      // Update verification status
+      setVerificationSteps(prev => ({
+        ...prev,
+        introVideoUploaded: true
+      }));
+
+      setVideoUrl("");
+      setShowVideoInput(false);
+
+      toast({
+        title: "Upload Berhasil!",
+        description: "Link video perkenalan berhasil disimpan.",
+      });
+
+      onUpdate?.();
+    } catch (error: any) {
+      toast({
+        title: "Upload Gagal",
+        description: error.message || "Terjadi kesalahan saat menyimpan link video.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleFileUpload = async (type: string, file: File) => {
     if (!applicationData?.id) {
@@ -222,24 +315,22 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
   const handleResendVerification = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/verification/resend-email', {
+      const response = await fetch(`/api/applications/${applicationData?.id}/resend-verification`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          email: applicationData?.email,
-          applicationId: applicationData?.id 
-        }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to resend verification email');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to resend verification email');
       }
 
+      const result = await response.json();
       toast({
         title: "Email Terkirim!",
-        description: "Email verifikasi telah dikirim ulang. Silakan periksa inbox Anda.",
+        description: result.message || "Email verifikasi telah dikirim ulang. Silakan periksa inbox Anda.",
       });
     } catch (error: any) {
       toast({
@@ -264,6 +355,10 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
         return <Upload className="h-5 w-5 text-gray-400" />;
       case 'hskUploaded':
         return <FileText className="h-5 w-5 text-gray-400" />;
+      case 'cvUploaded':
+        return <FileText className="h-5 w-5 text-gray-400" />;
+      case 'introVideoUploaded':
+        return <Video className="h-5 w-5 text-gray-400" />;
       case 'availabilitySet':
         return <Calendar className="h-5 w-5 text-gray-400" />;
       case 'adminApproved':
@@ -302,7 +397,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
             </div>
             <Progress value={completenessScore} className="h-2" />
             <p className="text-xs text-gray-600">
-              Minimal 80 poin diperlukan untuk review admin. Akun akan diaktivasi setelah persetujuan admin.
+              Isikan semua data yang diperlukan untuk review admin. Akun akan diaktivasi setelah persetujuan admin.
             </p>
           </div>
         </CardContent>
@@ -356,14 +451,31 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
       )}
 
       {/* Verification Steps */}
-      <Card>
+      <Card className="relative">
         <CardHeader>
           <CardTitle>Langkah Verifikasi</CardTitle>
           <CardDescription>
-            Selesaikan semua langkah berikut untuk verifikasi lengkap
+            {isRejectedAndLocked() 
+              ? "Langkah verifikasi dikunci karena pendaftaran ditolak. Tunggu periode reaplikasi." 
+              : "Selesaikan semua langkah berikut untuk verifikasi lengkap"
+            }
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        
+        {/* Rejection Overlay */}
+        {isRejectedAndLocked() && (
+          <div className="absolute inset-0 bg-gray-900/20 rounded-lg flex items-center justify-center z-10">
+            <div className="bg-white p-4 rounded-lg shadow-lg border border-red-200 max-w-sm text-center">
+              <div className="text-red-500 text-2xl mb-2">🔒</div>
+              <h4 className="font-medium text-red-800 mb-1">Verifikasi Dikunci</h4>
+              <p className="text-sm text-red-700">
+                Pendaftaran ditolak. Anda dapat mengajukan ulang setelah 3 bulan.
+              </p>
+            </div>
+          </div>
+        )}
+        
+        <CardContent className={`space-y-4 ${isRejectedAndLocked() ? 'opacity-30' : ''}`}>
           {/* Email Verification */}
           <div className="flex items-center justify-between p-4 border rounded-lg">
             <div className="flex items-center space-x-3">
@@ -386,13 +498,13 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
                   size="sm"
                   variant="outline"
                   onClick={handleResendVerification}
-                  disabled={isLoading}
+                  disabled={isLoading || isRejectedAndLocked()}
                 >
                   Kirim Ulang
                 </Button>
               )}
               <Badge variant={verificationSteps.emailVerified ? "default" : "outline"}>
-                30 poin
+                20 poin
               </Badge>
             </div>
           </div>
@@ -405,7 +517,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
               {getStepIcon('studentIdUploaded', verificationSteps.studentIdUploaded)}
               <div>
                 <h3 className="font-medium">Dokumen Kartu Mahasiswa</h3>
-                <p className="text-sm text-gray-600">Upload kartu mahasiswa atau sertifikat HSK Anda</p>
+                <p className="text-sm text-gray-600">Upload kartu mahasiswa</p>
                 {applicationData?.verificationSteps?.studentIdStatus === 'changes_requested' && (
                   <div className="mt-2 p-2 bg-orange-100 border border-orange-200 rounded">
                     <p className="text-xs text-orange-800 font-medium">
@@ -417,7 +529,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
             </div>
             <div className="flex items-center space-x-2">
               <Badge variant={verificationSteps.studentIdUploaded ? "default" : "outline"}>
-                25 poin
+                15 poin
               </Badge>
               {(!verificationSteps.studentIdUploaded || applicationData?.verificationSteps?.studentIdStatus === 'changes_requested') && (
                 <Button
@@ -433,7 +545,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
                     };
                     input.click();
                   }}
-                  disabled={isLoading}
+                  disabled={isLoading || isRejectedAndLocked()}
                 >
                   <Upload className="h-4 w-4" />
                   {applicationData?.verificationSteps?.studentIdStatus === 'changes_requested' ? 'Unggah Ulang' : ''}
@@ -478,7 +590,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
                     };
                     input.click();
                   }}
-                  disabled={isLoading}
+                  disabled={isLoading || isRejectedAndLocked()}
                 >
                   <FileText className="h-4 w-4" />
                   {applicationData?.verificationSteps?.hskStatus === 'changes_requested' ? 'Unggah Ulang' : ''}
@@ -507,7 +619,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
             </div>
             <div className="flex items-center space-x-2">
               <Badge variant={verificationSteps.cvUploaded ? "default" : "outline"}>
-                15 poin
+                20 poin
               </Badge>
               {(!verificationSteps.cvUploaded || applicationData?.verificationSteps?.cvStatus === 'changes_requested') && (
                 <Button
@@ -523,13 +635,124 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
                     };
                     input.click();
                   }}
-                  disabled={isLoading}
+                  disabled={isLoading || isRejectedAndLocked()}
                 >
                   <FileText className="h-4 w-4" />
                   {applicationData?.verificationSteps?.cvStatus === 'changes_requested' ? 'Unggah Ulang' : 'Upload CV'}
                 </Button>
               )}
             </div>
+          </div>
+
+          {/* Video Introduction */}
+          <div className="flex flex-col p-4 border rounded-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                {getStepIcon('introVideoUploaded', verificationSteps.introVideoUploaded)}
+                <div>
+                  <h3 className="font-medium">Video Perkenalan</h3>
+                  <p className="text-sm text-gray-600">Upload link Google Drive video perkenalan Anda</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Badge variant={verificationSteps.introVideoUploaded ? "default" : "outline"}>
+                  15 poin
+                </Badge>
+                {!verificationSteps.introVideoUploaded && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowVideoInput(!showVideoInput)}
+                    disabled={isLoading || isRejectedAndLocked()}
+                  >
+                    <Video className="h-4 w-4" />
+                    Upload Video
+                  </Button>
+                )}
+              </div>
+            </div>
+            
+            {/* Video Requirements */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <h4 className="font-medium text-blue-900 mb-2">📋 Persyaratan Video Perkenalan:</h4>
+              
+              {/* Technical Requirements */}
+              <div className="mb-3">
+                <h5 className="font-medium text-blue-900 mb-1">Spesifikasi Teknis:</h5>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• Mengenakan pakaian formal atau kemeja yang rapi</li>
+                  <li>• Posisi berdiri dengan postur tegak (frame setengah badan)</li>
+                  <li>• Artikulasi suara yang jelas dan tegas</li>
+                  <li>• Durasi video maksimal 30 detik</li>
+                  <li>• Jarak optimal dari kamera sekitar 1 meter</li>
+                </ul>
+              </div>
+
+              {/* Content Requirements */}
+              <div className="mb-3">
+                <h5 className="font-medium text-blue-900 mb-1">Konten Perkenalan (Dalam Bahasa Mandarin):</h5>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• Nama lengkap</li>
+                  <li>• Usia</li>
+                  <li>• Asal daerah</li>
+                  <li>• Latar belakang pendidikan terakhir</li>
+                  <li>• Pengalaman kerja yang relevan</li>
+                  <li>• Kemampuan bahasa yang dikuasai</li>
+                  <li>• Kemampuan literasi Mandarin (membaca dan menulis), jika ada</li>
+                </ul>
+              </div>
+
+              <p className="text-xs text-blue-700 mt-2">
+                💡 <strong>Petunjuk:</strong> Unggah video ke Google Drive, atur izin akses menjadi "Siapa saja dengan tautan dapat melihat", kemudian salin tautannya.
+              </p>
+            </div>
+
+            {/* Video URL Input */}
+            {showVideoInput && !verificationSteps.introVideoUploaded && (
+              <div className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div>
+                  <Label htmlFor="video-url">Link Google Drive Video</Label>
+                  <div className="flex space-x-2 mt-1">
+                    <Input
+                      id="video-url"
+                      type="url"
+                      placeholder="https://drive.google.com/file/d/..."
+                      value={videoUrl}
+                      onChange={(e) => setVideoUrl(e.target.value)}
+                      disabled={isLoading || isRejectedAndLocked()}
+                    />
+                    <Button
+                      onClick={handleVideoUpload}
+                      disabled={isLoading || !videoUrl.trim() || isRejectedAndLocked()}
+                      size="sm"
+                    >
+                      {isLoading ? "Menyimpan..." : "Simpan"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Pastikan video dapat diakses oleh siapa saja dengan link ini
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Show video link if uploaded */}
+            {verificationSteps.introVideoUploaded && applicationData?.introVideo && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-green-800">✅ Video perkenalan telah diupload</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(applicationData.introVideo, '_blank')}
+                    className="text-xs"
+                  >
+                    <ExternalLink className="h-3 w-3 mr-1" />
+                    Lihat Video
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Availability Setup */}
@@ -543,7 +766,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
             </div>
             <div className="flex items-center space-x-2">
               <Badge variant={verificationSteps.availabilitySet ? "default" : "outline"}>
-                15 poin
+                10 poin
               </Badge>
               {!verificationSteps.availabilitySet && (
                 <Button
@@ -553,7 +776,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
                     // Navigate to availability tab using correct route
                     setLocation('/translator/dashboard?tab=availability');
                   }}
-                  disabled={isLoading}
+                  disabled={isLoading || isRejectedAndLocked()}
                 >
                   <Calendar className="h-4 w-4 mr-2" />
                   Atur Jadwal
@@ -567,12 +790,19 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
             <div className="flex items-center space-x-3">
               {getStepIcon('adminApproved', verificationSteps.adminApproved)}
               <div>
-                <h3 className="font-medium">Review Admin</h3>
-                <p className="text-sm text-gray-600">Menunggu persetujuan admin</p>
+                <h3 className="font-medium">
+                  {verificationSteps.adminApproved ? "Terverifikasi" : "Review Admin"}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  {verificationSteps.adminApproved 
+                    ? "Akun Anda telah diverifikasi oleh admin" 
+                    : "Menunggu persetujuan admin"
+                  }
+                </p>
               </div>
             </div>
             <Badge variant={verificationSteps.adminApproved ? "default" : "outline"}>
-              ✅ Persetujuan Admin
+              {verificationSteps.adminApproved ? "Terverifikasi" : "Persetujuan Admin"}
             </Badge>
           </div>
 
@@ -582,7 +812,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
               <div className="flex items-center space-x-2">
                 <CheckCircle className="h-5 w-5 text-green-500" />
                 <p className="text-green-800 font-medium">
-                  🎉 Selamat! Akun Anda telah diaktivasi oleh admin dan siap digunakan.
+                   Selamat! Akun Anda telah diaktivasi oleh admin dan siap digunakan.
                 </p>
               </div>
             </div>

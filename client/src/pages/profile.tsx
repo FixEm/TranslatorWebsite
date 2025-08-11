@@ -151,11 +151,11 @@ export default function ProfilePage() {
                 <CardContent className="p-6">
                   <h2 className="text-lg font-semibold text-navy-800 mb-3">Layanan yang Ditawarkan</h2>
                   <div className="flex flex-wrap gap-2">
-                    {(provider.services as string[]).map((service) => (
+                    {Array.isArray(provider.services) ? (provider.services as string[]).map((service: string) => (
                       <Badge key={service} variant="secondary" className="bg-navy-100 text-navy-800">
                         {getServiceLabel(service)}
                       </Badge>
-                    ))}
+                    )) : []}
                   </div>
                 </CardContent>
               </Card>

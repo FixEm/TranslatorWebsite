@@ -69,7 +69,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create new application
+  // Create new application (JSON endpoint without files)
+  app.post("/api/applications/submit", async (req, res) => {
+    try {
+      console.log('📥 [JSON APPLICATION] Request body received:', {
+        ...req.body,
+        password: req.body.password ? '[HIDDEN]' : 'NO PASSWORD'
+      });
+      
+      // First validate the raw data (including password confirmation)
+      console.log('🔍 [JSON APPLICATION] Validating raw data...');
+      
+      try {
+        const rawValidation = insertApplicationSchema.parse(req.body);
+        console.log('✅ [JSON APPLICATION] Raw validation successful');
+      } catch (validationError) {
+        console.log('❌ [JSON APPLICATION] Raw validation failed:', validationError);
+        if (validationError && typeof validationError === 'object' && 'issues' in validationError) {
+          const issues = (validationError as any).issues;
+          console.log('🔍 [JSON APPLICATION] Validation issues:', JSON.stringify(issues, null, 2));
+          return res.status(400).json({ 
+            message: "Validation error", 
+            errors: issues.map((issue: any) => ({
+              field: issue.path?.join('.'),
+              message: issue.message,
+              code: issue.code
+            }))
+          });
+        }
+        throw validationError;
+      }
+      
+      // Hash password after validation
+      let hashedPassword = undefined;
+      if (req.body.password) {
+        hashedPassword = await bcrypt.hash(req.body.password, 10);
+      }
+      
+      const applicationData = {
+        ...req.body,
+        password: hashedPassword,
+        // Ensure intent is properly set from the request
+        intent: req.body.intent || 'translator',
+        profileImage: null, // No files in this endpoint
+        identityDocument: null,
+        certificates: []
+      };
+
+      console.log('📝 [JSON APPLICATION] Application data being saved:', {
+        ...applicationData,
+        password: applicationData.password ? '[HASHED]' : 'NO PASSWORD',
+        intent: applicationData.intent
+      });
+
+      // Remove confirmPassword from data before saving to database
+      delete applicationData.confirmPassword;
+      
+      const application = await storage.createApplication(applicationData);
+      
+      // Create Firebase user and send verification email
+      try {
+        const { createUserAndSendVerification } = await import('./auth');
+        const { uid, emailSent } = await createUserAndSendVerification(
+          applicationData.email, 
+          applicationData.name, 
+          application.id
+        );
+        
+        // Update application with Firebase UID
+        await storage.updateApplicationEmailVerification(application.id, uid);
+        
+        console.log(`📧 Email verifikasi Firebase ${emailSent ? 'terkirim' : 'dicoba kirim'} ke ${applicationData.email}`);
+        
+        res.status(201).json({
+          ...application,
+          emailVerificationSent: emailSent,
+          message: emailSent ? 'Silakan cek email Anda untuk verifikasi akun' : 'Akun berhasil dibuat'
+        });
+      } catch (userError: any) {
+        console.error('Gagal membuat pengguna Firebase atau mengirim verifikasi:', userError);
+        res.status(201).json({ 
+          ...application,
+          emailVerificationSent: false,
+          message: 'Akun berhasil dibuat tetapi gagal mengirim email verifikasi'
+        });
+      }
+    } catch (error) {
+      console.log('❌ [JSON APPLICATION] Error:', error);
+      if (error && typeof error === 'object' && 'errors' in error) {
+        return res.status(400).json({ message: "Validation error", errors: (error as any).errors });
+      }
+      res.status(500).json({ message: "Failed to create application" });
+    }
+  });
+
+  // Create new application with file uploads (multipart form data)
   app.post("/api/applications", upload.fields([
     { name: 'profileImage', maxCount: 1 },
     { name: 'identityDocument', maxCount: 1 },
@@ -143,7 +237,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         password: hashedPassword, // Store hashed password
         services,
-        intent: 'translator', // Ensure this is set for translator applications
+        intent: req.body.selectedRole || req.body.intent || 'translator', // Use selected role from frontend
         pricePerDay: req.body.pricePerDay,
         profileImage: files?.profileImage?.[0]?.path,
         identityDocument: files?.identityDocument?.[0]?.path,
@@ -306,6 +400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             profileImage: application.profileImage,
             identityDocument: application.identityDocument,
             certificates: Array.isArray(application.certificates) ? application.certificates : [],
+            introVideo: application.introVideo, // Include intro video URL
             intent: (application.intent || 'translator') as 'translator' | 'tour_guide' | 'both',
           };
           
@@ -365,6 +460,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("❌ Error in final approval:", error);
       res.status(500).json({ message: "Failed to process final approval" });
+    }
+  });
+
+  // Update recruitment status endpoint
+  app.patch("/api/applications/:id/recruitment-status", async (req, res) => {
+    try {
+      console.log("🎯 UPDATE RECRUITMENT STATUS:", { id: req.params.id, status: req.body.recruitmentStatus });
+      const { id } = req.params;
+      const { recruitmentStatus } = req.body;
+      
+      if (!['pending', 'approved', 'rejected'].includes(recruitmentStatus)) {
+        console.log("❌ Invalid recruitment status:", recruitmentStatus);
+        return res.status(400).json({ message: "Invalid recruitment status" });
+      }
+      
+      // Update recruitment status
+      await storage.updateApplicationField(id, 'recruitmentStatus', recruitmentStatus);
+      
+      // If approved, also set adminApproved to true in verificationSteps
+      if (recruitmentStatus === 'approved') {
+        const currentApp = await storage.getApplication(id);
+        const currentVerificationSteps = (currentApp as any)?.verificationSteps || {};
+        
+        await storage.updateApplicationField(id, 'verificationSteps', {
+          ...currentVerificationSteps,
+          adminApproved: true
+        });
+        console.log("✅ Set adminApproved to true for approved candidate");
+      }
+      
+      // Get the updated application to return
+      const updatedApplication = await storage.getApplication(id);
+      
+      console.log("✅ Recruitment status updated for:", updatedApplication?.email);
+      res.json({ message: "Recruitment status updated", application: updatedApplication });
+    } catch (error) {
+      console.error("❌ Error updating recruitment status:", error);
+      res.status(500).json({ message: "Failed to update recruitment status" });
     }
   });
 

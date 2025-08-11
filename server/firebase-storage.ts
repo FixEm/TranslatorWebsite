@@ -29,8 +29,13 @@ export class FirebaseStorage {
   async getServiceProviders(filters?: { city?: string; services?: string[]; minRating?: number; email?: string }): Promise<ServiceProvider[]> {
     console.log("🔥 Firebase: Getting service providers with filters:", filters);
     
-    // Temporarily remove the isVerified filter to see all data
+    // Only return admin-approved service providers for public search
     let query: any = this.serviceProvidersCollection;
+    
+    // Add admin approval filter for public searches (when no email filter is specified)
+    if (!filters?.email) {
+      query = query.where('verificationSteps.adminApproved', '==', true);
+    }
     
     if (filters?.city) {
       query = query.where('city', '==', filters.city);
@@ -113,11 +118,13 @@ export class FirebaseStorage {
       googleId: cleanProvider.googleId || null,
       studentIdDocument: null,
       hskCertificate: null,
+      cvDocument: null,
       introVideo: null,
       verificationSteps: {
         emailVerified: false,
         studentIdUploaded: false,
         hskUploaded: false,
+        cvUploaded: false,
         introVideoUploaded: false,
         adminApproved: false
       },
@@ -150,10 +157,12 @@ export class FirebaseStorage {
       studentIdDocument: null,
       hskCertificate: null,
       introVideo: null,
+      cvDocument: null,
       verificationSteps: {
         emailVerified: false,
         studentIdUploaded: false,
         hskUploaded: false,
+        cvUploaded: false,
         introVideoUploaded: false,
         adminApproved: false
       },
@@ -379,12 +388,74 @@ export class FirebaseStorage {
     console.log(`✅ FirebaseStorage: HSK certificate updated for ${id}`);
   }
 
-  async updateIntroVideo(id: string, videoUrl: string): Promise<void> {
-    await this.applicationsCollection.doc(id).update({
-      introVideo: videoUrl,
-      'verificationSteps.introVideoUploaded': true,
+  async updateCvDocument(id: string, documentUrl: string): Promise<void> {
+    console.log(`📄 FirebaseStorage: Updating CV document for ${id}`);
+    
+    // Get current application to check for change requests
+    const application = await this.getApplication(id);
+    const updateData: any = {
+      cvDocument: documentUrl,
+      'verificationSteps.cvUploaded': true,
+      'verificationSteps.cvStatus': 'pending', // Reset status to pending for admin review
       updatedAt: new Date()
-    });
+    };
+
+    // Clear change requests if this document was requested for changes
+    if (application && (application as any).changeRequests?.requests) {
+      const filteredRequests = (application as any).changeRequests.requests.filter(
+        (req: any) => req.type !== 'cv'
+      );
+      
+      if (filteredRequests.length === 0) {
+        // No more change requests, remove the field entirely
+        updateData.changeRequests = null;
+      } else {
+        // Update with remaining requests
+        updateData.changeRequests = {
+          ...(application as any).changeRequests,
+          requests: filteredRequests
+        };
+      }
+      console.log(`✅ FirebaseStorage: Cleared CV change request for ${id}`);
+    }
+
+    await this.applicationsCollection.doc(id).update(updateData);
+    console.log(`✅ FirebaseStorage: CV document updated for ${id}`);
+  }
+
+  async updateIntroVideo(id: string, videoUrl: string): Promise<void> {
+    console.log(`🎬 FirebaseStorage: Storing intro video URL in Firestore for application ${id}`);
+    
+    // Get current application to check for change requests
+    const application = await this.getApplication(id);
+    const updateData: any = {
+      introVideo: videoUrl, // Store the Google Drive URL directly in Firestore
+      'verificationSteps.introVideoUploaded': true,
+      'verificationSteps.introVideoStatus': 'pending', // Reset status to pending for admin review
+      updatedAt: new Date()
+    };
+
+    // Clear change requests if this video was requested for changes
+    if (application && (application as any).changeRequests?.requests) {
+      const filteredRequests = (application as any).changeRequests.requests.filter(
+        (req: any) => req.type !== 'introVideo'
+      );
+      
+      if (filteredRequests.length === 0) {
+        // No more change requests, remove the field entirely
+        updateData.changeRequests = null;
+      } else {
+        // Update with remaining requests
+        updateData.changeRequests = {
+          ...(application as any).changeRequests,
+          requests: filteredRequests
+        };
+      }
+      console.log(`✅ FirebaseStorage: Cleared intro video change request for ${id}`);
+    }
+
+    await this.applicationsCollection.doc(id).update(updateData);
+    console.log(`✅ FirebaseStorage: Intro video URL stored in Firestore for application ${id}`);
   }
 
   async approveApplication(id: string, adminNotes?: string): Promise<void> {
@@ -440,21 +511,54 @@ export class FirebaseStorage {
       console.log(`🗑️ FirebaseStorage: Attempting to delete file: ${fileUrl}`);
       
       // Extract the file path from the URL
-      // URL format: https://storage.googleapis.com/bucket-name/path/to/file
-      const urlParts = fileUrl.split('/');
-      const bucketName = urlParts[3]; // Get bucket name
-      const filePath = urlParts.slice(4).join('/'); // Get file path
+      // URL format: https://storage.googleapis.com/bucket-name/path/to/file?query=params
+      // or: https://firebasestorage.googleapis.com/v0/b/bucket-name/o/encoded-path?alt=media&token=...
       
-      console.log(`🗑️ FirebaseStorage: Bucket: ${bucketName}, Path: ${filePath}`);
+      let filePath: string;
+      
+      if (fileUrl.includes('firebasestorage.googleapis.com')) {
+        // Handle Firebase Storage download URLs with encoded paths
+        const urlParts = fileUrl.split('/o/');
+        if (urlParts.length >= 2) {
+          const encodedPath = urlParts[1].split('?')[0]; // Remove query parameters
+          filePath = decodeURIComponent(encodedPath);
+        } else {
+          throw new Error('Invalid Firebase Storage URL format');
+        }
+      } else if (fileUrl.includes('storage.googleapis.com')) {
+        // Handle direct storage URLs
+        const urlParts = fileUrl.split('/');
+        if (urlParts.length >= 5) {
+          const pathParts = urlParts.slice(4); // Remove protocol, domain, and bucket
+          // Remove query parameters from the last part
+          const lastPart = pathParts[pathParts.length - 1].split('?')[0];
+          pathParts[pathParts.length - 1] = lastPart;
+          filePath = pathParts.join('/');
+        } else {
+          throw new Error('Invalid storage URL format');
+        }
+      } else {
+        throw new Error('Unsupported storage URL format');
+      }
+      
+      console.log(`🗑️ FirebaseStorage: Extracted file path: ${filePath}`);
       
       const bucket = firebaseStorage.bucket();
       const file = bucket.file(filePath);
+      
+      // Check if file exists before attempting to delete
+      const [exists] = await file.exists();
+      if (!exists) {
+        console.log(`⚠️ FirebaseStorage: File does not exist: ${filePath}`);
+        return; // Don't throw error if file doesn't exist
+      }
       
       await file.delete();
       console.log(`✅ FirebaseStorage: File deleted successfully: ${filePath}`);
     } catch (error) {
       console.error(`❌ FirebaseStorage: Error deleting file ${fileUrl}:`, error);
-      throw error;
+      // Don't throw error for file deletion failures - log and continue
+      // This ensures the document reference is still cleared from the database
     }
   }
 
@@ -475,22 +579,44 @@ export class FirebaseStorage {
 
       // Process each document type
       for (const docType of documentTypes) {
-        if (docType === 'hsk' && (application as any).hskCertificate) {
-          console.log(`🗑️ FirebaseStorage: Deleting HSK certificate: ${(application as any).hskCertificate}`);
-          await this.deleteFileFromStorage((application as any).hskCertificate);
-          updateData.hskCertificate = null;
-        }
-        
-        if (docType === 'studentId' && (application as any).studentIdDocument) {
-          console.log(`🗑️ FirebaseStorage: Deleting Student ID document: ${(application as any).studentIdDocument}`);
-          await this.deleteFileFromStorage((application as any).studentIdDocument);
-          updateData.studentIdDocument = null;
-        }
+        try {
+          if (docType === 'hsk' && (application as any).hskCertificate) {
+            console.log(`🗑️ FirebaseStorage: Deleting HSK certificate: ${(application as any).hskCertificate}`);
+            await this.deleteFileFromStorage((application as any).hskCertificate);
+            updateData.hskCertificate = null;
+          }
+          
+          if (docType === 'studentId' && (application as any).studentIdDocument) {
+            console.log(`🗑️ FirebaseStorage: Deleting Student ID document: ${(application as any).studentIdDocument}`);
+            await this.deleteFileFromStorage((application as any).studentIdDocument);
+            updateData.studentIdDocument = null;
+          }
 
-        if (docType === 'cv' && (application as any).cvDocument) {
-          console.log(`🗑️ FirebaseStorage: Deleting CV document: ${(application as any).cvDocument}`);
-          await this.deleteFileFromStorage((application as any).cvDocument);
-          updateData.cvDocument = null;
+          if (docType === 'cv' && (application as any).cvDocument) {
+            console.log(`🗑️ FirebaseStorage: Deleting CV document: ${(application as any).cvDocument}`);
+            await this.deleteFileFromStorage((application as any).cvDocument);
+            updateData.cvDocument = null;
+          }
+
+          if (docType === 'introVideo' && (application as any).introVideo) {
+            console.log(`🗑️ FirebaseStorage: Clearing intro video URL from Firestore: ${(application as any).introVideo}`);
+            // For intro video, we just clear the URL from Firestore since it's stored externally (Google Drive)
+            updateData.introVideo = null;
+            updateData['verificationSteps.introVideoUploaded'] = false;
+          }
+        } catch (fileDeleteError) {
+          console.error(`⚠️ FirebaseStorage: Error deleting ${docType} file (continuing anyway):`, fileDeleteError);
+          // Still clear the document reference even if file deletion fails
+          if (docType === 'hsk') {
+            updateData.hskCertificate = null;
+          } else if (docType === 'studentId') {
+            updateData.studentIdDocument = null;
+          } else if (docType === 'cv') {
+            updateData.cvDocument = null;
+          } else if (docType === 'introVideo') {
+            updateData.introVideo = null;
+            updateData['verificationSteps.introVideoUploaded'] = false;
+          }
         }
       }
 

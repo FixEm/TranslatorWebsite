@@ -627,10 +627,9 @@ router.post('/applications/:id/upload/cv', upload.single('cvDocument'), async (r
 
     console.log('✅ CV uploaded successfully:', downloadURL);
 
-    // Update the application in Firestore
+    // Update the application in Firestore and clear change requests
     try {
-      await storage.updateApplicationField(id, 'cvDocument', downloadURL);
-      await storage.updateApplicationField(id, 'verificationSteps.cvUploaded', true);
+      await storage.updateCvDocument(id, downloadURL);
       console.log('✅ Application updated with CV info');
     } catch (updateError) {
       console.error('⚠️ Error updating application (file uploaded successfully):', updateError);
@@ -645,6 +644,39 @@ router.post('/applications/:id/upload/cv', upload.single('cvDocument'), async (r
   } catch (error) {
     console.error('Error uploading CV:', error);
     res.status(500).json({ error: 'Gagal mengunggah CV' });
+  }
+});
+
+// Upload intro video (Google Drive link)
+router.post('/applications/:id/upload/intro-video', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { videoUrl } = req.body;
+    
+    if (!videoUrl || typeof videoUrl !== 'string') {
+      return res.status(400).json({ error: 'Link video tidak valid' });
+    }
+    
+    // Basic URL validation for Google Drive links
+    if (!videoUrl.includes('drive.google.com')) {
+      return res.status(400).json({ error: 'Harap gunakan link Google Drive yang valid' });
+    }
+    
+    console.log(`📹 Uploading intro video for application ${id}:`, { videoUrl });
+    
+    // Update the application with video URL
+    await storage.updateIntroVideo(id, videoUrl);
+    
+    console.log('✅ Intro video URL saved successfully');
+    
+    res.json({
+      success: true,
+      message: 'Link video perkenalan berhasil disimpan',
+      videoUrl
+    });
+  } catch (error) {
+    console.error('Error saving intro video URL:', error);
+    res.status(500).json({ error: 'Gagal menyimpan link video perkenalan' });
   }
 });
 

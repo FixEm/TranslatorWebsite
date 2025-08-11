@@ -33,7 +33,8 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  Calendar
+  Calendar,
+  Video
 } from "lucide-react";
 import { Application } from "@shared/schema";
 
@@ -53,7 +54,6 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [studentTypeFilter, setStudentTypeFilter] = useState("all");  // New state for student type filtering
-  const [verifiedUsers, setVerifiedUsers] = useState<any[]>([]);
   const [showVerifiedUsers, setShowVerifiedUsers] = useState(false);
   const [interviewModalOpen, setInterviewModalOpen] = useState(false);
   const [requestChangesModalOpen, setRequestChangesModalOpen] = useState(false);
@@ -172,6 +172,10 @@ export default function AdminPage() {
 				} else if (documentType === 'studentId') {
 					updatedStudent.studentIdCard.status = status;
 				} else if (documentType === 'cv') {
+					// Ensure cvDocument exists before updating its status
+					if (!updatedStudent.cvDocument) {
+						updatedStudent.cvDocument = { status: 'pending', url: null };
+					}
 					updatedStudent.cvDocument.status = status;
 				}
 				
@@ -242,7 +246,7 @@ export default function AdminPage() {
 		},
 	});
 
-	const formatDate = (date: Date | string | number | null | undefined) => {
+	const formatDate = (date: Date | string | number | null | undefined | any) => {
 		if (!date) return "-";
 		
 		try {
@@ -255,6 +259,9 @@ export default function AdminPage() {
 			} else if (typeof date === 'number') {
 				// Handle Unix timestamp (seconds or milliseconds)
 				dateObj = new Date(date > 1000000000000 ? date : date * 1000);
+			} else if (typeof date === 'object' && date._seconds) {
+				// Handle Firestore timestamp object
+				dateObj = new Date(date._seconds * 1000);
 			} else {
 				return "-";
 			}
@@ -399,7 +406,8 @@ export default function AdminPage() {
       experience: questionnaireData.experience || app.experience,
       motivation: questionnaireData.motivation || (app as any).motivation || 'Not provided',
       expectedGraduation: (app as any).expectedGraduation || 'Not provided',
-      intent: (app as any).intent || 'translator' // Add intent field for filtering
+      intent: (app as any).intent || 'translator', // Add intent field for filtering
+      introVideo: (app as any).introVideo || null // Add introVideo field for video viewing
     };
   };
 
@@ -426,10 +434,12 @@ export default function AdminPage() {
       experience: questionnaireData.experience || app.experience,
       rating: 0, // Default rating
       completedProjects: 0, // Default
-      recruitmentStatus: (app as any).recruitmentStatus || "pending_interview",
+      recruitmentStatus: (app as any).recruitmentStatus || "pending",
       approvedAt: formatDate((app as any).createdAt || new Date()),
       interviewScheduled: null,
-      finalStatus: (app as any).finalStatus || "pending"
+      finalStatus: (app as any).finalStatus || "pending",
+      introVideo: (app as any).introVideo || null, // Add introVideo field for video viewing
+      intent: (app as any).intent || 'translator' // Add intent field for candidate type
     };
   };
 
@@ -439,13 +449,9 @@ export default function AdminPage() {
 
   const getRecruitmentStatusBadge = (status: string) => {
     switch (status) {
-      case 'pending_interview':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Menunggu Wawancara</Badge>;
-      case 'interviewed':
-        return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Sudah Wawancara</Badge>;
-      case 'final_approval':
-        return <Badge className="bg-green-100 text-green-800">Persetujuan Akhir</Badge>;
-      case 'accepted':
+      case 'pending':
+        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Menunggu Review</Badge>;
+      case 'approved':
         return <Badge className="bg-green-100 text-green-800">Diterima</Badge>;
       case 'rejected':
         return <Badge variant="destructive">Ditolak</Badge>;
@@ -563,11 +569,58 @@ export default function AdminPage() {
     updateStatusMutation.mutate({ id: studentId, status });
   };
 
-  const updateRecruitmentStatus = (candidateId: string, status: string) => {
-    toast({
-      title: "Recruitment Status Updated",
-      description: `Candidate status updated to ${status}`,
-    });
+  const updateRecruitmentStatus = async (candidateId: string, status: string) => {
+    console.log("🔥 updateRecruitmentStatus called:", { candidateId, status });
+    try {
+      const response = await fetch(`/api/applications/${candidateId}/recruitment-status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ recruitmentStatus: status }),
+      });
+
+      console.log("🔥 Response status:", response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("🔥 Response error:", errorText);
+        throw new Error('Failed to update recruitment status');
+      }
+
+      const result = await response.json();
+      console.log("🔥 Update successful:", result);
+
+      // If approved, also update the main application status for verified users
+      if (status === 'approved') {
+        console.log("🔥 Updating main application status to approved...");
+        await fetch(`/api/applications/${candidateId}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: 'approved' }),
+        });
+      }
+
+      // Refresh the data
+      queryClient.invalidateQueries({ queryKey: ["/api/applications"] });
+
+      toast({
+        title: status === 'approved' ? "Candidate Accepted" : "Candidate Rejected",
+        description: status === 'approved' 
+          ? "Candidate has been accepted and added to verified users." 
+          : "Candidate has been rejected.",
+        variant: status === 'approved' ? "default" : "destructive",
+      });
+    } catch (error: any) {
+      console.error("🔥 Error updating recruitment status:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update recruitment status: " + (error.message || 'Unknown error'),
+        variant: "destructive",
+      });
+    }
   };
 
   const scheduleInterview = (candidateId: string, date: string) => {
@@ -590,11 +643,7 @@ export default function AdminPage() {
 
         if (!response.ok) throw new Error('Failed to approve user');
         
-        // Add to verified users list
-        const candidate = recruitmentCandidates.find((c: any) => c.id === candidateId);
-        if (candidate) {
-          setVerifiedUsers(prev => [...prev, { ...candidate, isVerified: true }]);
-        }
+        // Candidate is now approved and will automatically appear in verified users
       } else {
         // Handle rejection by updating the application status
         const response = await fetch(`/api/applications/${candidateId}`, {
@@ -629,16 +678,15 @@ export default function AdminPage() {
   };
 
   // Fetch verified users
-  const fetchVerifiedUsers = async () => {
-    try {
-      const response = await fetch('/api/applications/verified');
-      if (!response.ok) throw new Error('Failed to fetch verified users');
-      const data = await response.json();
-      setVerifiedUsers(data);
-    } catch (error) {
-      console.error('Error fetching verified users:', error);
-    }
-  };
+  // Get verified users from recruitment candidates who are approved
+  const verifiedUsers = recruitmentCandidates.filter((candidate: any) => 
+    candidate.recruitmentStatus === 'approved'
+  ).map((candidate: any) => ({
+    ...candidate,
+    // Ensure all needed fields are present for the verified users table
+    whatsapp: candidate.phone,
+    rating: candidate.rating || 0
+  }));
 
   // Revoke verification for a user
   const revokeVerification = async (userId: string, userName: string) => {
@@ -652,10 +700,8 @@ export default function AdminPage() {
 
       if (!response.ok) throw new Error('Failed to revoke verification');
 
-      // Remove user from verified users list
-      setVerifiedUsers(prev => prev.filter(user => user.id !== userId));
-
-      // Invalidate queries to refresh data
+      
+      // User verification revoked - they will automatically be removed from verified users      // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ["/api/applications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/applications/verified"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
@@ -673,11 +719,9 @@ export default function AdminPage() {
     }
   };
 
-  // Fetch verified users on component mount
+  // Verified users are automatically computed from approved recruitment candidates
   useEffect(() => {
-    if (activeTab === "recruitment") {
-      fetchVerifiedUsers();
-    }
+    // No need to fetch verified users separately - they're computed from recruitment data
   }, [activeTab]);
 
   const viewDocument = (url: string | null, documentType: string) => {
@@ -808,7 +852,7 @@ export default function AdminPage() {
                     <div className="ml-4">
                       <p className="text-sm text-gray-600">Pending Interviews</p>
                       <p className="text-2xl font-bold text-navy-800">
-                        {recruitmentCandidates.filter((c: any) => c.recruitmentStatus === 'pending_interview').length}
+                        {recruitmentCandidates.filter((c: any) => c.recruitmentStatus === 'pending').length}
                       </p>
                     </div>
                   </div>
@@ -857,151 +901,88 @@ export default function AdminPage() {
                 <Tabs defaultValue="all" className="space-y-4">
                   <TabsList>
                     <TabsTrigger value="all">All Candidates</TabsTrigger>
-                    <TabsTrigger value="pending_interview">Pending Interview</TabsTrigger>
-                    <TabsTrigger value="interviewed">Interviewed</TabsTrigger>
-                    <TabsTrigger value="final_approval">Final Approval</TabsTrigger>
+                    <TabsTrigger value="pending">Pending Review</TabsTrigger>
+                    <TabsTrigger value="reviewed">Reviewed</TabsTrigger>
                     <TabsTrigger value="accepted">Accepted</TabsTrigger>
                     <TabsTrigger value="rejected">Rejected</TabsTrigger>
                   </TabsList>
                   
                   <TabsContent value="all" className="space-y-4">
-                    {recruitmentCandidates.map((candidate: any) => (
-                      <Card key={candidate.id} className="hover:shadow-lg transition-shadow">
-                        <CardContent className="p-6">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-4">
-                              <div className="w-16 h-16 bg-navy-100 rounded-full flex items-center justify-center">
-                                <Users className="h-8 w-8 text-navy-600" />
-                              </div>
-                              <div className="flex-1">
-                                <h3 className="font-semibold text-navy-800 text-lg">{candidate.name}</h3>
-                                <p className="text-sm text-gray-600">{candidate.email}</p>
-                                <p className="text-sm text-gray-500">{candidate.university} • {candidate.studentId}</p>
-                                <div className="flex items-center gap-4 mt-2">
-                                  <span className="text-sm font-medium text-blue-600">{candidate.hskLevel}</span>
-                                  <span className="text-sm text-gray-500">{candidate.experience} experience</span>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">University</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reviewed At</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Video</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {recruitmentCandidates.map((candidate: any) => (
+                            <tr key={candidate.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center">
+                                  <div className="w-10 h-10 bg-navy-100 rounded-full flex items-center justify-center">
+                                    <Users className="h-5 w-5 text-navy-600" />
+                                  </div>
+                                  <div className="ml-4">
+                                    <div className="text-sm font-medium text-gray-900">{candidate.name}</div>
+                                    <div className="text-xs text-gray-500">{candidate.email}</div>
+                                  </div>
                                 </div>
-                              </div>
-                            </div>
-                            
-                            <div className="text-right space-y-2">
-                              <div className="flex items-center gap-2">
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">{candidate.university}</div>
+                                <div className="text-xs text-gray-500">{candidate.hskLevel}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {candidate.intent === 'tour_guide' ? (
+                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                    🗺️ Tour Guide
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                                    🔤 Translator
+                                  </Badge>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
                                 {getRecruitmentStatusBadge(candidate.recruitmentStatus)}
-                                {getFinalStatusBadge(candidate.finalStatus)}
-                              </div>
-                              <div className="flex gap-2">
-                                {candidate.recruitmentStatus === 'pending_interview' && candidate.finalStatus === 'pending' && (
-                                  <>
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline"
-                                      onClick={() => scheduleInterview(candidate.id, '2025-01-25')}
-                                    >
-                                      Schedule Interview
-                                    </Button>
-                                    <Button 
-                                      size="sm" 
-                                      className="bg-green-600 hover:bg-green-700"
-                                      onClick={() => finalApproval(candidate.id, true)}
-                                    >
-                                      Accept
-                                    </Button>
-                                    <Button 
-                                      size="sm" 
-                                      variant="destructive"
-                                      onClick={() => finalApproval(candidate.id, false)}
-                                    >
-                                      Reject
-                                    </Button>
-                                  </>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {candidate.recruitmentStatus !== 'pending' ? (
+                                  candidate.approvedAt || 'Unknown'
+                                ) : (
+                                  <span className="text-gray-400">Not reviewed</span>
                                 )}
-                                {candidate.recruitmentStatus === 'interviewed' && candidate.finalStatus === 'pending' && (
-                                  <>
-                                    <Button 
-                                      size="sm" 
-                                      className="bg-green-600 hover:bg-green-700"
-                                      onClick={() => finalApproval(candidate.id, true)}
-                                    >
-                                      Approve
-                                    </Button>
-                                    <Button 
-                                      size="sm" 
-                                      variant="destructive"
-                                      onClick={() => finalApproval(candidate.id, false)}
-                                    >
-                                      Reject
-                                    </Button>
-                                  </>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {candidate.introVideo ? (
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => window.open(candidate.introVideo, '_blank')}
+                                  >
+                                    <Video className="h-4 w-4 mr-2" />
+                                    View
+                                  </Button>
+                                ) : (
+                                  <span className="text-xs text-gray-400">No video</span>
                                 )}
-                                {candidate.recruitmentStatus === 'final_approval' && candidate.finalStatus === 'pending' && (
-                                  <>
-                                    <Button 
-                                      size="sm" 
-                                      className="bg-green-600 hover:bg-green-700"
-                                      onClick={() => finalApproval(candidate.id, true)}
-                                    >
-                                      Accept
-                                    </Button>
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline"
-                                      onClick={() => viewUserProfile(candidate)}
-                                    >
-                                      View Profile
-                                    </Button>
-                                  </>
-                                )}
-                                {(candidate.finalStatus === 'approved' || candidate.recruitmentStatus === 'accepted') && (
-                                  <>
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline" 
-                                      className="bg-green-50 text-green-700 border-green-200"
-                                      disabled
-                                    >
-                                      ✓ Accepted
-                                    </Button>
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline"
-                                      onClick={() => viewUserProfile(candidate)}
-                                    >
-                                      View Profile
-                                    </Button>
-                                  </>
-                                )}
-                                {candidate.finalStatus === 'rejected' && (
-                                  <>
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline" 
-                                      className="bg-red-50 text-red-700 border-red-200"
-                                      disabled
-                                    >
-                                      ✗ Rejected
-                                    </Button>
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline"
-                                      onClick={() => viewUserProfile(candidate)}
-                                    >
-                                      View Profile
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          
-                          
-                        </CardContent>
-                      </Card>
-                    ))}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </TabsContent>
                   
-                  <TabsContent value="pending_interview" className="space-y-4">
+                  <TabsContent value="pending" className="space-y-4">
                     {recruitmentCandidates
-                      .filter((c: any) => c.recruitmentStatus === 'pending_interview')
+                      .filter((c: any) => c.recruitmentStatus === 'pending')
                       .map((candidate: any) => (
                         <Card key={candidate.id} className="hover:shadow-lg transition-shadow">
                           <CardContent className="p-6">
@@ -1016,21 +997,49 @@ export default function AdminPage() {
                                   <p className="text-sm text-blue-600">{candidate.hskLevel} • {candidate.experience}</p>
                                 </div>
                               </div>
-                              <Button 
-                                className="bg-blue-600 hover:bg-blue-700"
-                                onClick={() => scheduleInterview(candidate.id, '2025-01-25')}
-                              >
-                                Schedule Interview
-                              </Button>
+                              <div className="flex items-center space-x-2">
+                                {candidate.introVideo ? (
+                                  <>
+                                    <Button 
+                                      className="bg-blue-600 hover:bg-blue-700"
+                                      onClick={() => window.open(candidate.introVideo, '_blank')}
+                                    >
+                                      <Video className="h-4 w-4 mr-2" />
+                                      View Video
+                                    </Button>
+                                    <Button 
+                                      className="bg-green-600 hover:bg-green-700"
+                                      onClick={() => updateRecruitmentStatus(candidate.id, 'approved')}
+                                    >
+                                      <CheckCircle className="h-4 w-4 mr-2" />
+                                      Accept
+                                    </Button>
+                                    <Button 
+                                      className="bg-red-600 hover:bg-red-700"
+                                      onClick={() => updateRecruitmentStatus(candidate.id, 'rejected')}
+                                    >
+                                      <XCircle className="h-4 w-4 mr-2" />
+                                      Reject
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <Button 
+                                    variant="outline"
+                                    disabled
+                                  >
+                                    No Video
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           </CardContent>
                         </Card>
                     ))}
                   </TabsContent>
                   
-                  <TabsContent value="interviewed" className="space-y-4">
+                  <TabsContent value="reviewed" className="space-y-4">
                     {recruitmentCandidates
-                      .filter((c: any) => c.recruitmentStatus === 'interviewed')
+                      .filter((c: any) => c.recruitmentStatus === 'approved' || c.recruitmentStatus === 'rejected')
                       .map((candidate: any) => (
                         <Card key={candidate.id} className="hover:shadow-lg transition-shadow">
                           <CardContent className="p-6">
@@ -1065,50 +1074,9 @@ export default function AdminPage() {
                     ))}
                   </TabsContent>
                   
-                  <TabsContent value="final_approval" className="space-y-4">
-                    {recruitmentCandidates
-                      .filter((c: any) => c.recruitmentStatus === 'final_approval')
-                      .map((candidate: any) => (
-                        <Card key={candidate.id} className="hover:shadow-lg transition-shadow border-green-200">
-                          <CardContent className="p-6">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-4">
-                                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                                  <Handshake className="h-8 w-8 text-green-600" />
-                                </div>
-                                <div>
-                                  <h3 className="font-semibold text-navy-800">{candidate.name}</h3>
-                                  <p className="text-sm text-gray-600">{candidate.university}</p>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <Badge className="bg-green-100 text-green-800">Ready for Recruitment</Badge>
-                                    <span className="text-sm text-green-600">★ {candidate.rating}</span>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <Button 
-                                  variant="outline"
-                                  onClick={() => finalApproval(candidate.id, candidate.name)}
-                                  className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
-                                >
-                                  ✓ Accept & Verify
-                                </Button>
-                                <Button variant="outline">
-                                  View Full Profile
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                    ))}
-                  </TabsContent>
-                  
                   <TabsContent value="accepted" className="space-y-4">
-                    {(() => {
-                      const acceptedCandidates = recruitmentCandidates.filter((c: any) => c.finalStatus === 'approved');
-                      console.log("🎯 Accepted tab - candidates with finalStatus === 'approved':", acceptedCandidates.map(c => ({ name: c.name, finalStatus: c.finalStatus, recruitmentStatus: c.recruitmentStatus })));
-                      return acceptedCandidates;
-                    })()
+                    {recruitmentCandidates
+                      .filter((c: any) => c.recruitmentStatus === 'approved')
                       .map((candidate: any) => (
                         <Card key={candidate.id} className="hover:shadow-lg transition-shadow border-green-200">
                           <CardContent className="p-6">
@@ -1122,7 +1090,7 @@ export default function AdminPage() {
                                   <p className="text-sm text-gray-600">{candidate.university}</p>
                                   <div className="flex items-center gap-2 mt-1">
                                     <Badge className="bg-green-100 text-green-800">Accepted & Verified</Badge>
-                                    <span className="text-sm text-green-600">HSK {candidate.hskLevel}</span>
+                                    <span className="text-sm text-green-600">{candidate.hskLevel}</span>
                                   </div>
                                 </div>
                               </div>
@@ -1144,7 +1112,7 @@ export default function AdminPage() {
                   
                   <TabsContent value="rejected" className="space-y-4">
                     {recruitmentCandidates
-                      .filter((c: any) => c.finalStatus === 'rejected')
+                      .filter((c: any) => c.recruitmentStatus === 'rejected')
                       .map((candidate: any) => (
                         <Card key={candidate.id} className="hover:shadow-lg transition-shadow border-red-200">
                           <CardContent className="p-6">
@@ -1314,7 +1282,7 @@ export default function AdminPage() {
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               <div className="flex items-center">
                                 <span className="text-yellow-400">★</span>
-                                <span className="ml-1">{user.rating || '4.5'}</span>
+                                <span className="ml-1">{user.rating || 0}</span>
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -1400,16 +1368,29 @@ export default function AdminPage() {
                             <p className="text-sm text-navy-800">{selectedStudent.phone}</p>
                           </div>
                           <div>
-                            <label className="text-sm font-medium text-gray-600">City</label>
+                            <label className="text-sm font-medium text-gray-600">City of Residence</label>
                             <p className="text-sm text-navy-800">{selectedStudent.city}</p>
                           </div>
                           <div>
-                            <label className="text-sm font-medium text-gray-600">Expected Price/Day</label>
+                            <label className="text-sm font-medium text-gray-600">Expected rate (daily)</label>
                             <p className="text-sm text-navy-800">Rp{selectedStudent.pricePerDay}</p>
                           </div>
                           <div>
-                            <label className="text-sm font-medium text-gray-600">Experience</label>
+                            <label className="text-sm font-medium text-gray-600">Experience and Specializations</label>
                             <p className="text-sm text-navy-800">{selectedStudent.experience}</p>
+                            <div className="mt-1">
+                              {selectedStudent.specializations && selectedStudent.specializations.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {selectedStudent.specializations.map((spec: any, index: number) => (
+                                    <Badge key={index} variant="secondary" className="text-xs">
+                                      {spec}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-500">Not specified</p>
+                              )}
+                            </div>
                           </div>
                           <div>
                             <label className="text-sm font-medium text-gray-600">Fluent Languages</label>
@@ -1427,22 +1408,7 @@ export default function AdminPage() {
                               )}
                             </div>
                           </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-600">Specializations</label>
-                            <div className="mt-1">
-                              {selectedStudent.specializations && selectedStudent.specializations.length > 0 ? (
-                                <div className="flex flex-wrap gap-1">
-                                  {selectedStudent.specializations.map((spec: any, index: number) => (
-                                    <Badge key={index} variant="secondary" className="text-xs">
-                                      {spec}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="text-sm text-gray-500">Not specified</p>
-                              )}
-                            </div>
-                          </div>
+                         
                           
                          
                           <div>
@@ -1680,27 +1646,59 @@ export default function AdminPage() {
                                     <div>
                                       <span className="text-blue-700">Last Updated:</span>
                                       <span className="font-medium ml-2">
-                                        {selectedStudent.availability.lastUpdated ? 
-                                          new Date(selectedStudent.availability.lastUpdated).toLocaleDateString('id-ID') : 
-                                          'Not set'
-                                        }
+                                        {(() => {
+                                          try {
+                                            const lastUpdated = selectedStudent.availability.lastUpdated;
+                                            
+                                            if (!lastUpdated) {
+                                              return 'Not set';
+                                            }
+                                            
+                                            // If it's already a Date object
+                                            if (lastUpdated instanceof Date) {
+                                              return lastUpdated.toLocaleDateString('id-ID');
+                                            }
+                                            
+                                            // If it's a Firestore timestamp object with _seconds
+                                            if (typeof lastUpdated === 'object' && (lastUpdated as any)._seconds) {
+                                              const date = new Date((lastUpdated as any)._seconds * 1000);
+                                              return date.toLocaleDateString('id-ID');
+                                            }
+                                            
+                                            // If it's a string, try to parse it
+                                            if (typeof lastUpdated === 'string') {
+                                              const date = new Date(lastUpdated);
+                                              return isNaN(date.getTime()) ? 'Invalid format' : date.toLocaleDateString('id-ID');
+                                            }
+                                            
+                                            // If it's a number (timestamp)
+                                            if (typeof lastUpdated === 'number') {
+                                              const date = new Date(lastUpdated);
+                                              return date.toLocaleDateString('id-ID');
+                                            }
+                                            
+                                            return 'Unknown format';
+                                          } catch (error) {
+                                            console.error('Error formatting lastUpdated in admin:', error);
+                                            return 'Error formatting date';
+                                          }
+                                        })()}
                                       </span>
                                     </div>
                                   </div>
                                 </div>
 
-                                {/* Schedule Grid */}
+                                {/* Calendar View */}
                                 <div className="border rounded-lg overflow-hidden">
                                   <div className="bg-gray-50 p-3 border-b">
-                                    <h4 className="font-medium">Available Dates</h4>
+                                    <h4 className="font-medium">Availability Calendar</h4>
                                   </div>
                                   <div className="p-4">
                                     {(() => {
-                                      // Get all available dates from the schedule and sort them
+                                      // Get all available dates from the schedule
                                       const availableDates = selectedStudent.availability.schedule
                                         .filter((s: any) => s.isAvailable)
-                                        .map((s: any) => s.date)
-                                        .sort();
+                                        .map((s: any) => s.date);
                                       
                                       if (availableDates.length === 0) {
                                         return (
@@ -1709,39 +1707,153 @@ export default function AdminPage() {
                                           </div>
                                         );
                                       }
+
+                                      // Generate calendar for current month and next month
+                                      const today = new Date();
+                                      const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                                      const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+                                      
+                                      const generateCalendarMonth = (monthStart: Date) => {
+                                        const dates = [];
+                                        const year = monthStart.getFullYear();
+                                        const month = monthStart.getMonth();
+                                        
+                                        // Get first day of month and its day of week
+                                        const firstDay = new Date(year, month, 1);
+                                        const startDate = new Date(firstDay);
+                                        startDate.setDate(startDate.getDate() - firstDay.getDay()); // Start from Sunday
+                                        
+                                        // Generate 6 weeks (42 days) to fill the calendar grid
+                                        for (let i = 0; i < 42; i++) {
+                                          const date = new Date(startDate);
+                                          date.setDate(startDate.getDate() + i);
+                                          dates.push({
+                                            date,
+                                            isCurrentMonth: date.getMonth() === month,
+                                            isToday: date.toDateString() === today.toDateString(),
+                                            isAvailable: availableDates.includes(date.toISOString().split('T')[0])
+                                          });
+                                        }
+                                        
+                                        return dates;
+                                      };
+
+                                      const currentMonthDates = generateCalendarMonth(currentMonth);
+                                      const nextMonthDates = generateCalendarMonth(nextMonth);
+                                      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                       
                                       return (
-                                        <div className="space-y-4">
+                                        <div className="space-y-6">
                                           <div className="text-sm text-gray-600 text-center">
                                             {availableDates.length} available dates configured
                                           </div>
                                           
-                                          <div className="grid grid-cols-7 gap-2 text-sm">
-                                            {/* Calendar-style grid showing available dates */}
-                                            {availableDates.slice(0, 21).map((dateStr: string) => {
-                                              const date = new Date(dateStr);
-                                              const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                                              const dayName = dayNames[date.getDay()];
-                                              
-                                              return (
-                                                <div key={dateStr} className="bg-green-50 border border-green-200 rounded p-3 text-center">
-                                                  <div className="font-medium text-green-800">{dayName}</div>
-                                                  <div className="text-sm text-green-600">
-                                                    {date.toLocaleDateString('en-US', { 
-                                                      month: 'short', 
-                                                      day: 'numeric' 
-                                                    })}
+                                          {/* Two Month Calendar Grid */}
+                                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                            {/* Current Month */}
+                                            <div>
+                                              <h3 className="text-lg font-semibold mb-4 text-center">
+                                                {currentMonth.toLocaleDateString('id-ID', { 
+                                                  year: 'numeric', 
+                                                  month: 'long'
+                                                })}
+                                              </h3>
+                                              <div className="grid grid-cols-7 gap-1 text-sm">
+                                                {/* Header - Days of week */}
+                                                {dayNames.map((day) => (
+                                                  <div key={day} className="font-semibold p-2 text-center text-gray-600">
+                                                    {day}
                                                   </div>
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                          
-                                          {availableDates.length > 21 && (
-                                            <div className="text-center text-sm text-gray-500">
-                                              ... and {availableDates.length - 21} more dates
+                                                ))}
+
+                                                {/* Calendar Dates */}
+                                                {currentMonthDates.map(({ date, isCurrentMonth, isToday, isAvailable }, index) => (
+                                                  <div
+                                                    key={index}
+                                                    className={`
+                                                      p-2 text-center min-h-[40px] flex items-center justify-center transition-all duration-200
+                                                      ${!isCurrentMonth 
+                                                        ? 'text-gray-300' 
+                                                        : isAvailable 
+                                                          ? 'bg-green-100 border border-green-300 text-green-800 rounded' 
+                                                          : 'text-gray-700 hover:bg-gray-50'
+                                                      }
+                                                      ${isToday ? 'ring-2 ring-blue-400 rounded' : ''}
+                                                    `}
+                                                  >
+                                                    <div className="text-center">
+                                                      <div className={`${isToday ? 'font-bold' : ''}`}>
+                                                        {date.getDate()}
+                                                      </div>
+                                                      {isAvailable && isCurrentMonth && (
+                                                        <div className="w-1 h-1 bg-green-500 rounded-full mx-auto mt-1"></div>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
                                             </div>
-                                          )}
+
+                                            {/* Next Month */}
+                                            <div>
+                                              <h3 className="text-lg font-semibold mb-4 text-center">
+                                                {nextMonth.toLocaleDateString('id-ID', { 
+                                                  year: 'numeric', 
+                                                  month: 'long'
+                                                })}
+                                              </h3>
+                                              <div className="grid grid-cols-7 gap-1 text-sm">
+                                                {/* Header - Days of week */}
+                                                {dayNames.map((day) => (
+                                                  <div key={day} className="font-semibold p-2 text-center text-gray-600">
+                                                    {day}
+                                                  </div>
+                                                ))}
+
+                                                {/* Calendar Dates */}
+                                                {nextMonthDates.map(({ date, isCurrentMonth, isToday, isAvailable }, index) => (
+                                                  <div
+                                                    key={index}
+                                                    className={`
+                                                      p-2 text-center min-h-[40px] flex items-center justify-center transition-all duration-200
+                                                      ${!isCurrentMonth 
+                                                        ? 'text-gray-300' 
+                                                        : isAvailable 
+                                                          ? 'bg-green-100 border border-green-300 text-green-800 rounded' 
+                                                          : 'text-gray-700 hover:bg-gray-50'
+                                                      }
+                                                      ${isToday ? 'ring-2 ring-blue-400 rounded' : ''}
+                                                    `}
+                                                  >
+                                                    <div className="text-center">
+                                                      <div className={`${isToday ? 'font-bold' : ''}`}>
+                                                        {date.getDate()}
+                                                      </div>
+                                                      {isAvailable && isCurrentMonth && (
+                                                        <div className="w-1 h-1 bg-green-500 rounded-full mx-auto mt-1"></div>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* Legend */}
+                                          <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t justify-center">
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
+                                              <span className="text-sm text-gray-600">Available</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-4 h-4 bg-white border border-gray-200 rounded"></div>
+                                              <span className="text-sm text-gray-600">Not available</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-4 h-4 bg-white border-2 border-blue-400 rounded"></div>
+                                              <span className="text-sm text-gray-600">Today</span>
+                                            </div>
+                                          </div>
                                         </div>
                                       );
                                     })()}
@@ -1839,7 +1951,7 @@ export default function AdminPage() {
                                 <div className="flex items-center justify-between">
                                   <span>CV/Resume:</span>
                                   {selectedStudent.cvDocument?.url ? 
-                                    getDocumentStatus(selectedStudent.cvDocument.status) : 
+                                    getDocumentStatus(selectedStudent.cvDocument?.status || 'pending') : 
                                     <XCircle className="h-4 w-4 text-red-600" />
                                   }
                                 </div>
@@ -1862,10 +1974,17 @@ export default function AdminPage() {
                               <Button 
                                 variant="destructive"
                                 onClick={() => updateStudentStatus(selectedStudent.id, 'rejected')}
-                                disabled={updateStatusMutation.isPending || selectedStudent.status === 'rejected'}
+                                disabled={
+                                  updateStatusMutation.isPending || 
+                                  selectedStudent.status === 'rejected' ||
+                                  selectedStudent.recruitmentStatus === 'accepted' ||
+                                  selectedStudent.finalStatus === 'approved'
+                                }
                               >
                                 <XCircle className="h-4 w-4 mr-2" />
-                                {selectedStudent.status === 'rejected' ? 'Already Rejected' : updateStatusMutation.isPending ? 'Updating...' : 'Reject Student'}
+                                {selectedStudent.status === 'rejected' ? 'Already Rejected' : 
+                                 (selectedStudent.recruitmentStatus === 'accepted' || selectedStudent.finalStatus === 'approved') ? 'Student Accepted' :
+                                 updateStatusMutation.isPending ? 'Updating...' : 'Reject Student'}
                               </Button>
                               <Button 
                                 variant="outline"
@@ -1873,10 +1992,14 @@ export default function AdminPage() {
                                   setSelectedCandidate(selectedStudent);
                                   setRequestChangesModalOpen(true);
                                 }}
-                                disabled={updateStatusMutation.isPending}
+                                disabled={
+                                  updateStatusMutation.isPending ||
+                                  selectedStudent.recruitmentStatus === 'accepted' ||
+                                  selectedStudent.finalStatus === 'approved'
+                                }
                               >
                                 <AlertCircle className="h-4 w-4 mr-2" />
-                                Request Changes
+                                {(selectedStudent.recruitmentStatus === 'accepted' || selectedStudent.finalStatus === 'approved') ? 'Student Accepted' : 'Request Changes'}
                               </Button>
                             </div>
                             
@@ -2238,6 +2361,20 @@ export default function AdminPage() {
 										}}
 									/>
 									<Label htmlFor="studentId" className="text-sm">Student ID Document</Label>
+								</div>
+                <div className="flex items-center space-x-2">
+									<Checkbox
+										id="cv"
+										checked={selectedChanges.includes('cv')}
+										onCheckedChange={(checked: boolean) => {
+											if (checked) {
+												setSelectedChanges(prev => [...prev, 'cv']);
+											} else {
+												setSelectedChanges(prev => prev.filter(item => item !== 'cv'));
+											}
+										}}
+									/>
+									<Label htmlFor="cv" className="text-sm">Curriculum Vitae (CV)</Label>
 								</div>
 							</div>
 						</div>
