@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import VerificationStatus from "@/components/verification-status";
+import AvailabilityCalendar from "@/components/availability-calendar";
 import { 
   SidebarProvider, 
   Sidebar, 
@@ -48,6 +49,31 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 
+// Custom hook to track URL search parameter changes
+function useSearchParams() {
+  const [searchParams, setSearchParams] = useState(() => new URLSearchParams(window.location.search));
+  
+  useEffect(() => {
+    const updateSearchParams = () => {
+      const newParams = new URLSearchParams(window.location.search);
+      setSearchParams(newParams);
+    };
+
+    // Listen for popstate events (back/forward navigation)
+    window.addEventListener('popstate', updateSearchParams);
+    
+    // Poll for changes in case the URL is changed programmatically
+    const interval = setInterval(updateSearchParams, 100);
+
+    return () => {
+      window.removeEventListener('popstate', updateSearchParams);
+      clearInterval(interval);
+    };
+  }, []);
+
+  return searchParams;
+}
+
 interface Job {
   id: string;
   title: string;
@@ -78,22 +104,25 @@ interface Profile {
 export default function TranslatorDashboard() {
   const { user, logout } = useAuth();
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const searchParams = useSearchParams(); // Use our custom hook
   const [activeTab, setActiveTab] = useState('verification'); // Start with verification tab
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [applicationData, setApplicationData] = useState(null);
 
-  // Handle URL query parameters for tab navigation
+  // Handle URL query parameters for tab navigation - now reactive to search params
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const tabParam = urlParams.get('tab');
+    const tabParam = searchParams.get('tab');
+    console.log('🔍 Search params changed, tab parameter:', tabParam);
+    
     if (tabParam) {
       // Map URL tab parameter to internal tab keys
       const tabMapping: { [key: string]: string } = {
         'profile': 'profile',
         'workspace': 'workspace',
         'verification': 'verification',
+        'availability': 'availability',
         'chat': 'chat',
         'notifications': 'notifications',
         'statistics': 'statistics',
@@ -102,10 +131,13 @@ export default function TranslatorDashboard() {
       
       const mappedTab = tabMapping[tabParam];
       if (mappedTab) {
+        console.log('✅ Setting active tab to:', mappedTab);
         setActiveTab(mappedTab);
+      } else {
+        console.log('❌ No mapping found for tab:', tabParam);
       }
     }
-  }, []);
+  }, [searchParams]); // Now depends on searchParams instead of location
 
   // Mock data - replace with real API calls
   const [profile] = useState<Profile>({
@@ -115,7 +147,7 @@ export default function TranslatorDashboard() {
     rating: 4.8,
     completedJobs: 47,
     balance: 2450000,
-    status: 'verified',
+    status: 'unverified', // Will be determined from applicationData
     specializations: ['Bahasa Mandarin', 'Teknis', 'Bisnis']
   });
 
@@ -191,12 +223,34 @@ export default function TranslatorDashboard() {
     fetchApplicationData();
   }, [user]);
 
+  // Function to handle tab changes with URL updates
+  const handleTabChange = (tabKey: string) => {
+    console.log('🔄 Changing tab to:', tabKey);
+    setActiveTab(tabKey);
+    
+    // Update URL with new tab parameter
+    const newUrl = `/translator/dashboard?tab=${tabKey}`;
+    console.log('🔄 Updating URL to:', newUrl);
+    
+    // Use history.pushState to update URL without reloading
+    window.history.pushState({}, '', newUrl);
+    
+    // Also update the location for wouter
+    setLocation(newUrl);
+  };
+
   const sidebarItems = [
     {
       title: "Verifikasi",
       icon: Shield,
       key: "verification",
       isActive: activeTab === 'verification'
+    },
+    {
+      title: "Ketersediaan",
+      icon: Calendar,
+      key: "availability",
+      isActive: activeTab === 'availability'
     },
     {
       title: "Workspace",
@@ -287,6 +341,25 @@ export default function TranslatorDashboard() {
       case 'hard': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  // Function to determine verification status from application data
+  const getVerificationStatus = () => {
+    if (!applicationData) return 'unverified';
+    
+    const appData = applicationData as any;
+    
+    // Check if admin has approved
+    if (appData.verificationSteps?.adminApproved) {
+      return 'verified';
+    }
+    
+    // Check if application is complete and pending admin review
+    if (appData.status === 'pending' || appData.status === 'under_review') {
+      return 'pending';
+    }
+    
+    return 'unverified';
   };
 
   const formatCurrency = (amount: number) => {
@@ -428,9 +501,9 @@ export default function TranslatorDashboard() {
                 <AvatarFallback className="text-2xl">{profile.name.charAt(0)}</AvatarFallback>
               </Avatar>
               <Badge variant="secondary" className="mb-2">
-                {profile.status === 'verified' && 'Terverifikasi'}
-                {profile.status === 'pending' && 'Menunggu Verifikasi'}
-                {profile.status === 'unverified' && 'Belum Verifikasi'}
+                {getVerificationStatus() === 'verified' && 'Terverifikasi'}
+                {getVerificationStatus() === 'pending' && 'Menunggu Verifikasi'}
+                {getVerificationStatus() === 'unverified' && 'Belum Terverifikasi'}
               </Badge>
             </div>
             
@@ -529,6 +602,28 @@ export default function TranslatorDashboard() {
             )}
           </div>
         );
+      case 'availability':
+        return (
+          <div>
+            {applicationData ? (
+              <AvailabilityCalendar 
+                userId={(applicationData as any).id || user?.uid}
+                initialAvailability={(applicationData as any).availability}
+                onUpdate={(availability) => {
+                  setApplicationData(prev => prev ? ({
+                    ...(prev as any),
+                    availability
+                  }) : null);
+                }}
+              />
+            ) : (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-navy-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Memuat data ketersediaan...</p>
+              </div>
+            )}
+          </div>
+        );
       case 'workspace':
         return renderWorkspace();
       case 'profile':
@@ -543,10 +638,123 @@ export default function TranslatorDashboard() {
         );
       case 'notifications':
         return (
-          <div className="text-center py-12">
-            <Bell className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-600 mb-2">Belum Ada Notifikasi</h3>
-            <p className="text-gray-500">Notifikasi terbaru akan muncul di sini.</p>
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold text-navy-800">Notifikasi</h2>
+            
+            {/* Change Requests Notifications */}
+            {(applicationData as any)?.changeRequests?.requests && (applicationData as any).changeRequests.requests.length > 0 && (
+              <Card className="border-orange-200 bg-orange-50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-orange-800">
+                    <Bell className="h-5 w-5" />
+                    Permintaan Perubahan Dokumen
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(applicationData as any).changeRequests.requests.map((request: any, index: number) => (
+                    <div key={index} className="p-4 bg-white border border-orange-200 rounded-lg">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-orange-900">
+                            📄 {request.type === 'hsk' ? 'Sertifikat HSK' : 'Kartu Mahasiswa'}
+                          </h4>
+                          <p className="text-sm text-orange-700 mt-1">{request.message}</p>
+                          <p className="text-xs text-orange-600 mt-2">
+                            🕒 {new Date(request.requestedAt).toLocaleDateString('id-ID', {
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="border-orange-300 text-orange-800">
+                          {request.status === 'pending' ? 'Perlu Ditindaklanjuti' : request.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <div className="text-blue-600 text-lg">💡</div>
+                      <div>
+                        <h5 className="font-medium text-blue-800 mb-1">Langkah Selanjutnya:</h5>
+                        <ul className="text-sm text-blue-700 space-y-1">
+                          <li>• Buka tab "Verifikasi" untuk mengunggah ulang dokumen</li>
+                          <li>• Pastikan dokumen memenuhi persyaratan yang diminta</li>
+                          <li>• File lama telah dihapus, Anda perlu mengunggah file baru</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* General System Notifications */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Notifikasi Sistem</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {/* Verification Status Notification */}
+                  {(applicationData as any)?.verificationSteps?.adminApproved && (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <div className="text-green-600">✅</div>
+                        <div>
+                          <h5 className="font-medium text-green-800">Akun Telah Diverifikasi</h5>
+                          <p className="text-sm text-green-700">Selamat! Akun Anda telah disetujui dan dapat menerima proyek.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Email Verification Notification */}
+                  {!user?.emailVerified && (
+                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <div className="text-yellow-600">⚠️</div>
+                        <div>
+                          <h5 className="font-medium text-yellow-800">Verifikasi Email Diperlukan</h5>
+                          <p className="text-sm text-yellow-700">Silakan periksa email Anda dan klik link verifikasi.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Profile Completion Notification */}
+                  {(applicationData as any)?.completenessScore && (applicationData as any).completenessScore < 80 && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <div className="text-blue-600">📋</div>
+                        <div>
+                          <h5 className="font-medium text-blue-800">Lengkapi Profil Anda</h5>
+                          <p className="text-sm text-blue-700">
+                            Profil Anda {(applicationData as any).completenessScore}% lengkap. 
+                            Minimum 80% diperlukan untuk aktivasi.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* No notifications message */}
+                  {(!(applicationData as any)?.changeRequests?.requests || (applicationData as any).changeRequests.requests.length === 0) &&
+                   (applicationData as any)?.verificationSteps?.adminApproved &&
+                   user?.emailVerified &&
+                   (applicationData as any)?.completenessScore >= 80 && (
+                    <div className="text-center py-8">
+                      <Bell className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-gray-600 mb-2">Semua Notifikasi Telah Dibaca</h3>
+                      <p className="text-gray-500">Tidak ada notifikasi baru saat ini.</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         );
       case 'statistics':
@@ -644,10 +852,17 @@ export default function TranslatorDashboard() {
                     <SidebarMenuItem key={item.key}>
                       <SidebarMenuButton
                         isActive={item.isActive}
-                        onClick={() => setActiveTab(item.key)}
+                        onClick={() => handleTabChange(item.key)}
                       >
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
+                        {item.key === 'notifications' && 
+                         (applicationData as any)?.changeRequests?.requests && 
+                         (applicationData as any).changeRequests.requests.length > 0 && (
+                          <Badge variant="destructive" className="ml-auto text-xs h-5 w-5 rounded-full flex items-center justify-center p-0">
+                            {(applicationData as any).changeRequests.requests.length}
+                          </Badge>
+                        )}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -683,9 +898,9 @@ export default function TranslatorDashboard() {
               <div className="flex-1">
                 <div className="text-sm font-medium">{profile.name}</div>
                 <Badge variant="secondary" className="text-xs">
-                  {profile.status === 'verified' && 'Terverifikasi'}
-                  {profile.status === 'pending' && 'Menunggu'}
-                  {profile.status === 'unverified' && 'Belum Verifikasi'}
+                  {getVerificationStatus() === 'verified' && 'Terverifikasi'}
+                  {getVerificationStatus() === 'pending' && 'Menunggu'}
+                  {getVerificationStatus() === 'unverified' && 'Belum Terverifikasi'}
                 </Badge>
               </div>
             </div>

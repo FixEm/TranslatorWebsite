@@ -11,7 +11,6 @@ import Login from "@/pages/login";
 import Admin from "@/pages/admin";
 import TranslatorSignup from "@/pages/translator-signup";
 import TranslatorDashboard from "@/pages/translator-dashboard";
-import AdminDashboard from "@/pages/admin-dashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -24,7 +23,6 @@ function Router() {
       <Route path="/admin" component={Admin} />
       <Route path="/translator/signup" component={TranslatorSignup} />
       <Route path="/translator/dashboard" component={TranslatorDashboard} />
-      <Route path="/admin/dashboard" component={AdminDashboard} />
       <Route component={NotFound} />
     </Switch>
   );

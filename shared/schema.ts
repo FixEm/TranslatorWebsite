@@ -27,18 +27,51 @@ export interface FirebaseServiceProvider {
   googleId?: string;
   studentIdDocument?: string | null;
   hskCertificate?: string | null;
+  cvDocument?: string | null;
   introVideo?: string | null;
   verificationSteps: {
     emailVerified: boolean;
     studentIdUploaded: boolean;
     hskUploaded: boolean;
+    cvUploaded: boolean;
     introVideoUploaded: boolean;
     adminApproved: boolean;
+    hskStatus?: 'pending' | 'approved' | 'rejected';
+    studentIdStatus?: 'pending' | 'approved' | 'rejected';
+    cvStatus?: 'pending' | 'approved' | 'rejected';
+    availabilitySet?: boolean;
   };
   completenessScore: number; // 0-100
   studentEmail?: string; // for .ac.id or .edu.cn verification
   intent: 'translator' | 'tour_guide' | 'both';
   yearsInChina?: number;
+  // Availability system
+  availability?: {
+    isAvailable: boolean;
+    schedule: Array<{
+      date: string; // YYYY-MM-DD format
+      timeSlots: Array<{
+        startTime: string; // HH:mm format
+        endTime: string; // HH:mm format
+        isAvailable: boolean;
+      }>;
+    }>;
+    recurringPatterns?: Array<{
+      dayOfWeek: number; // 0-6 (Sunday-Saturday)
+      timeSlots: Array<{
+        startTime: string;
+        endTime: string;
+      }>;
+      isActive: boolean;
+    }>;
+    unavailablePeriods?: Array<{
+      startDate: string; // YYYY-MM-DD
+      endDate: string; // YYYY-MM-DD
+      reason?: string; // e.g., "vacation", "exams"
+    }>;
+    lastUpdated: Date;
+    timezone?: string; // e.g., "Asia/Shanghai"
+  };
 }
 
 export interface FirebaseApplication {
@@ -62,13 +95,20 @@ export interface FirebaseApplication {
   firebaseUid?: string; // Firebase Auth user ID
   studentIdDocument?: string | null;
   hskCertificate?: string | null;
+  hskLevel?: string | null; // HSK level determined by admin after certificate review
+  cvDocument?: string | null;
   introVideo?: string | null;
   verificationSteps: {
     emailVerified: boolean;
     studentIdUploaded: boolean;
     hskUploaded: boolean;
+    cvUploaded: boolean;
     introVideoUploaded: boolean;
     adminApproved: boolean;
+    hskStatus?: 'pending' | 'approved' | 'rejected';
+    studentIdStatus?: 'pending' | 'approved' | 'rejected';
+    cvStatus?: 'pending' | 'approved' | 'rejected';
+    availabilitySet?: boolean;
   };
   completenessScore: number;
   studentEmail?: string;
@@ -76,6 +116,36 @@ export interface FirebaseApplication {
   yearsInChina?: number;
   adminNotes?: string; // For admin review comments
   questionnaireData?: any; // Role-specific questionnaire responses
+  // Recruitment pipeline fields
+  recruitmentStatus?: 'pending_interview' | 'interviewed' | 'final_approval' | 'accepted' | 'rejected';
+  finalStatus?: 'pending' | 'approved' | 'rejected';
+  // Availability system
+  availability?: {
+    isAvailable: boolean;
+    schedule: Array<{
+      date: string; // YYYY-MM-DD format
+      timeSlots: Array<{
+        startTime: string; // HH:mm format
+        endTime: string; // HH:mm format
+        isAvailable: boolean;
+      }>;
+    }>;
+    recurringPatterns?: Array<{
+      dayOfWeek: number; // 0-6 (Sunday-Saturday)
+      timeSlots: Array<{
+        startTime: string;
+        endTime: string;
+      }>;
+      isActive: boolean;
+    }>;
+    unavailablePeriods?: Array<{
+      startDate: string; // YYYY-MM-DD
+      endDate: string; // YYYY-MM-DD
+      reason?: string; // e.g., "vacation", "exams"
+    }>;
+    lastUpdated: Date;
+    timezone?: string; // e.g., "Asia/Shanghai"
+  };
 }
 
 export interface FirebaseContact {
@@ -131,11 +201,13 @@ export const serviceProviders = pgTable("service_providers", {
   googleId: text("google_id"),
   studentIdDocument: text("student_id_document"),
   hskCertificate: text("hsk_certificate"),
+  cvDocument: text("cv_document"),
   introVideo: text("intro_video"),
   verificationSteps: jsonb("verification_steps").default(JSON.stringify({
     emailVerified: false,
     studentIdUploaded: false,
     hskUploaded: false,
+    cvUploaded: false,
     introVideoUploaded: false,
     adminApproved: false
   })),
@@ -165,11 +237,13 @@ export const applications = pgTable("applications", {
   googleId: text("google_id"),
   studentIdDocument: text("student_id_document"),
   hskCertificate: text("hsk_certificate"),
+  cvDocument: text("cv_document"),
   introVideo: text("intro_video"),
   verificationSteps: jsonb("verification_steps").default(JSON.stringify({
     emailVerified: false,
     studentIdUploaded: false,
     hskUploaded: false,
+    cvUploaded: false,
     introVideoUploaded: false,
     adminApproved: false
   })),

@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { type ServiceProvider, type InsertServiceProvider, type Application, type InsertApplication, type Contact, type InsertContact, type User, type InsertUser } from "@shared/schema";
-import { db } from "./firebase";
+import { db, storage as firebaseStorage } from "./firebase";
 
 export class FirebaseStorage {
   private usersCollection = db.collection('users');
@@ -93,19 +93,24 @@ export class FirebaseStorage {
   }
 
   async createServiceProvider(provider: InsertServiceProvider): Promise<ServiceProvider> {
+    // Filter out undefined values to avoid Firestore errors
+    const cleanProvider = Object.fromEntries(
+      Object.entries(provider).filter(([_, value]) => value !== undefined)
+    ) as InsertServiceProvider;
+
     const newProvider = {
-      ...provider,
+      ...cleanProvider,
       id: '', // Will be set after creation
       isVerified: false,
       rating: "0",
       reviewCount: 0,
-      profileImage: provider.profileImage || null,
-      identityDocument: provider.identityDocument || null,
-      certificates: provider.certificates || null,
+      profileImage: cleanProvider.profileImage || null,
+      identityDocument: cleanProvider.identityDocument || null,
+      certificates: cleanProvider.certificates || null,
       createdAt: new Date(),
       updatedAt: new Date(),
       // New verification workflow fields
-      googleId: provider.googleId || null,
+      googleId: cleanProvider.googleId || null,
       studentIdDocument: null,
       hskCertificate: null,
       introVideo: null,
@@ -117,9 +122,9 @@ export class FirebaseStorage {
         adminApproved: false
       },
       completenessScore: 0,
-      intent: provider.intent || 'translator',
-      studentEmail: provider.studentEmail || null,
-      yearsInChina: provider.yearsInChina || null
+      intent: cleanProvider.intent || 'translator',
+      studentEmail: cleanProvider.studentEmail || null,
+      yearsInChina: cleanProvider.yearsInChina || null
     };
     
     const docRef = await this.serviceProvidersCollection.add(newProvider);
@@ -127,16 +132,21 @@ export class FirebaseStorage {
   }
 
   async createApplication(application: InsertApplication): Promise<Application> {
+    // Filter out undefined values to avoid Firestore errors
+    const cleanApplication = Object.fromEntries(
+      Object.entries(application).filter(([_, value]) => value !== undefined)
+    ) as InsertApplication;
+
     const newApplication = {
-      ...application,
+      ...cleanApplication,
       id: '', // Will be set after creation
       status: "pending",
-      profileImage: application.profileImage || null,
-      identityDocument: application.identityDocument || null,
-      certificates: application.certificates || null,
+      profileImage: cleanApplication.profileImage || null,
+      identityDocument: cleanApplication.identityDocument || null,
+      certificates: cleanApplication.certificates || null,
       createdAt: new Date(),
       // New verification workflow fields
-      googleId: application.googleId || null,
+      googleId: cleanApplication.googleId || null,
       studentIdDocument: null,
       hskCertificate: null,
       introVideo: null,
@@ -148,9 +158,9 @@ export class FirebaseStorage {
         adminApproved: false
       },
       completenessScore: 0,
-      intent: application.intent || 'translator',
-      studentEmail: application.studentEmail || null,
-      yearsInChina: application.yearsInChina || null,
+      intent: cleanApplication.intent || 'translator',
+      studentEmail: cleanApplication.studentEmail || null,
+      yearsInChina: cleanApplication.yearsInChina || null,
       adminNotes: null
     };
     
@@ -300,19 +310,73 @@ export class FirebaseStorage {
 
   // Document upload methods for applications
   async updateStudentDocument(id: string, documentUrl: string): Promise<void> {
-    await this.applicationsCollection.doc(id).update({
+    console.log(`📄 FirebaseStorage: Updating student document for ${id}`);
+    
+    // Get current application to check for change requests
+    const application = await this.getApplication(id);
+    const updateData: any = {
       studentIdDocument: documentUrl,
       'verificationSteps.studentIdUploaded': true,
+      'verificationSteps.studentIdStatus': 'pending', // Reset status to pending for admin review
       updatedAt: new Date()
-    });
+    };
+
+    // Clear change requests if this document was requested for changes
+    if (application && (application as any).changeRequests?.requests) {
+      const filteredRequests = (application as any).changeRequests.requests.filter(
+        (req: any) => req.type !== 'studentId'
+      );
+      
+      if (filteredRequests.length === 0) {
+        // No more change requests, remove the field entirely
+        updateData.changeRequests = null;
+      } else {
+        // Update with remaining requests
+        updateData.changeRequests = {
+          ...(application as any).changeRequests,
+          requests: filteredRequests
+        };
+      }
+      console.log(`✅ FirebaseStorage: Cleared studentId change request for ${id}`);
+    }
+
+    await this.applicationsCollection.doc(id).update(updateData);
+    console.log(`✅ FirebaseStorage: Student document updated for ${id}`);
   }
 
   async updateHskCertificate(id: string, certificateUrl: string): Promise<void> {
-    await this.applicationsCollection.doc(id).update({
+    console.log(`📄 FirebaseStorage: Updating HSK certificate for ${id}`);
+    
+    // Get current application to check for change requests
+    const application = await this.getApplication(id);
+    const updateData: any = {
       hskCertificate: certificateUrl,
       'verificationSteps.hskUploaded': true,
+      'verificationSteps.hskStatus': 'pending', // Reset status to pending for admin review
       updatedAt: new Date()
-    });
+    };
+
+    // Clear change requests if this document was requested for changes
+    if (application && (application as any).changeRequests?.requests) {
+      const filteredRequests = (application as any).changeRequests.requests.filter(
+        (req: any) => req.type !== 'hsk'
+      );
+      
+      if (filteredRequests.length === 0) {
+        // No more change requests, remove the field entirely
+        updateData.changeRequests = null;
+      } else {
+        // Update with remaining requests
+        updateData.changeRequests = {
+          ...(application as any).changeRequests,
+          requests: filteredRequests
+        };
+      }
+      console.log(`✅ FirebaseStorage: Cleared HSK change request for ${id}`);
+    }
+
+    await this.applicationsCollection.doc(id).update(updateData);
+    console.log(`✅ FirebaseStorage: HSK certificate updated for ${id}`);
   }
 
   async updateIntroVideo(id: string, videoUrl: string): Promise<void> {
@@ -347,17 +411,198 @@ export class FirebaseStorage {
 
   // Generic method to update any field in an application
   async updateApplicationField(id: string, field: string, value: any): Promise<void> {
+    console.log(`🔄 FirebaseStorage: Updating field '${field}' for application ${id} with value:`, value);
+    
     const updateData: any = {
       updatedAt: new Date()
     };
     updateData[field] = value;
     
-    await this.applicationsCollection.doc(id).update(updateData);
+    console.log(`🔄 FirebaseStorage: Update data:`, updateData);
+    
+    try {
+      await this.applicationsCollection.doc(id).update(updateData);
+      console.log(`✅ FirebaseStorage: Field '${field}' updated successfully for application ${id}`);
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error updating field '${field}' for application ${id}:`, error);
+      throw error;
+    }
   }
 
   // Alias for getApplication to match expected naming
   async getApplicationById(id: string): Promise<Application | undefined> {
     return this.getApplication(id);
+  }
+
+  // Delete file from Firebase Storage
+  async deleteFileFromStorage(fileUrl: string): Promise<void> {
+    try {
+      console.log(`🗑️ FirebaseStorage: Attempting to delete file: ${fileUrl}`);
+      
+      // Extract the file path from the URL
+      // URL format: https://storage.googleapis.com/bucket-name/path/to/file
+      const urlParts = fileUrl.split('/');
+      const bucketName = urlParts[3]; // Get bucket name
+      const filePath = urlParts.slice(4).join('/'); // Get file path
+      
+      console.log(`🗑️ FirebaseStorage: Bucket: ${bucketName}, Path: ${filePath}`);
+      
+      const bucket = firebaseStorage.bucket();
+      const file = bucket.file(filePath);
+      
+      await file.delete();
+      console.log(`✅ FirebaseStorage: File deleted successfully: ${filePath}`);
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error deleting file ${fileUrl}:`, error);
+      throw error;
+    }
+  }
+
+  // Delete specific document files for an application
+  async deleteApplicationDocuments(applicationId: string, documentTypes: string[]): Promise<void> {
+    try {
+      console.log(`🗑️ FirebaseStorage: Deleting documents for application ${applicationId}, types: ${documentTypes.join(', ')}`);
+      
+      // Get the current application to find file URLs
+      const application = await this.getApplication(applicationId);
+      if (!application) {
+        throw new Error('Application not found');
+      }
+
+      const updateData: any = {
+        updatedAt: new Date()
+      };
+
+      // Process each document type
+      for (const docType of documentTypes) {
+        if (docType === 'hsk' && (application as any).hskCertificate) {
+          console.log(`🗑️ FirebaseStorage: Deleting HSK certificate: ${(application as any).hskCertificate}`);
+          await this.deleteFileFromStorage((application as any).hskCertificate);
+          updateData.hskCertificate = null;
+        }
+        
+        if (docType === 'studentId' && (application as any).studentIdDocument) {
+          console.log(`🗑️ FirebaseStorage: Deleting Student ID document: ${(application as any).studentIdDocument}`);
+          await this.deleteFileFromStorage((application as any).studentIdDocument);
+          updateData.studentIdDocument = null;
+        }
+
+        if (docType === 'cv' && (application as any).cvDocument) {
+          console.log(`🗑️ FirebaseStorage: Deleting CV document: ${(application as any).cvDocument}`);
+          await this.deleteFileFromStorage((application as any).cvDocument);
+          updateData.cvDocument = null;
+        }
+      }
+
+      // Update the application to remove file references
+      await this.applicationsCollection.doc(applicationId).update(updateData);
+      console.log(`✅ FirebaseStorage: Document references cleared for application ${applicationId}`);
+      
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error deleting documents for application ${applicationId}:`, error);
+      throw error;
+    }
+  }
+
+  // Availability management methods
+  async updateApplicationAvailability(applicationId: string, availabilityData: any): Promise<void> {
+    try {
+      console.log(`📅 FirebaseStorage: Updating availability for application ${applicationId}`);
+      
+      // Clean undefined values from the availability data
+      const cleanAvailabilityData = Object.fromEntries(
+        Object.entries({
+          ...availabilityData,
+          lastUpdated: new Date()
+        }).filter(([_, value]) => value !== undefined)
+      );
+
+      await this.applicationsCollection.doc(applicationId).update({
+        availability: cleanAvailabilityData
+      });
+      
+      console.log(`✅ FirebaseStorage: Availability updated for application ${applicationId}`);
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error updating availability for application ${applicationId}:`, error);
+      throw error;
+    }
+  }
+
+  async getApplicationAvailability(applicationId: string): Promise<any> {
+    try {
+      console.log(`📅 FirebaseStorage: Getting availability for application ${applicationId}`);
+      
+      const doc = await this.applicationsCollection.doc(applicationId).get();
+      if (!doc.exists) {
+        throw new Error(`Application ${applicationId} not found`);
+      }
+
+      const applicationData = doc.data();
+      const availability = applicationData?.availability || {
+        isAvailable: true,
+        schedule: [],
+        recurringPatterns: [],
+        unavailablePeriods: [],
+        lastUpdated: new Date()
+      };
+
+      console.log(`✅ FirebaseStorage: Retrieved availability for application ${applicationId}`);
+      return availability;
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error getting availability for application ${applicationId}:`, error);
+      throw error;
+    }
+  }
+
+  // Update service provider availability
+  async updateServiceProviderAvailability(serviceProviderId: string, availabilityData: any): Promise<void> {
+    try {
+      console.log(`📅 FirebaseStorage: Updating availability for service provider ${serviceProviderId}`);
+      
+      // Clean undefined values from the availability data
+      const cleanAvailabilityData = Object.fromEntries(
+        Object.entries({
+          ...availabilityData,
+          lastUpdated: new Date()
+        }).filter(([_, value]) => value !== undefined)
+      );
+
+      await this.serviceProvidersCollection.doc(serviceProviderId).update({
+        availability: cleanAvailabilityData
+      });
+      
+      console.log(`✅ FirebaseStorage: Availability updated for service provider ${serviceProviderId}`);
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error updating availability for service provider ${serviceProviderId}:`, error);
+      throw error;
+    }
+  }
+
+  async getServiceProviderAvailability(serviceProviderId: string): Promise<any> {
+    try {
+      console.log(`📅 FirebaseStorage: Getting availability for service provider ${serviceProviderId}`);
+      
+      const doc = await this.serviceProvidersCollection.doc(serviceProviderId).get();
+      if (!doc.exists) {
+        throw new Error(`Service provider ${serviceProviderId} not found`);
+      }
+
+      const serviceProviderData = doc.data();
+      const availability = serviceProviderData?.availability || {
+        isAvailable: true,
+        schedule: [],
+        recurringPatterns: [],
+        unavailablePeriods: [],
+        lastUpdated: new Date(),
+        timezone: 'Asia/Shanghai'
+      };
+
+      console.log(`✅ FirebaseStorage: Retrieved availability for service provider ${serviceProviderId}`);
+      return availability;
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error getting availability for service provider ${serviceProviderId}:`, error);
+      throw error;
+    }
   }
 }
 
