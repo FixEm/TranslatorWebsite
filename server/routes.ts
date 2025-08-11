@@ -478,7 +478,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update recruitment status
       await storage.updateApplicationField(id, 'recruitmentStatus', recruitmentStatus);
       
-      // If approved, also set adminApproved to true in verificationSteps
+      // If approved, also set adminApproved to true in verificationSteps and update finalStatus
       if (recruitmentStatus === 'approved') {
         const currentApp = await storage.getApplication(id);
         const currentVerificationSteps = (currentApp as any)?.verificationSteps || {};
@@ -487,7 +487,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ...currentVerificationSteps,
           adminApproved: true
         });
-        console.log("✅ Set adminApproved to true for approved candidate");
+        
+        // Update finalStatus to 'approved' so they move to the correct section
+        await storage.updateApplicationField(id, 'finalStatus', 'approved');
+        
+        console.log("✅ Set adminApproved to true and finalStatus to approved for candidate");
+      } else if (recruitmentStatus === 'rejected') {
+        // If rejected, update finalStatus to 'rejected'
+        await storage.updateApplicationField(id, 'finalStatus', 'rejected');
+        console.log("✅ Set finalStatus to rejected for candidate");
       }
       
       // Get the updated application to return

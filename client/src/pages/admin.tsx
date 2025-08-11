@@ -630,53 +630,6 @@ export default function AdminPage() {
     });
   };
 
-  const finalApproval = async (candidateId: string, approved: boolean) => {
-    try {
-      if (approved) {
-        // Use the final approval endpoint for acceptance
-        const response = await fetch(`/api/applications/${candidateId}/final-approval`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!response.ok) throw new Error('Failed to approve user');
-        
-        // Candidate is now approved and will automatically appear in verified users
-      } else {
-        // Handle rejection by updating the application status
-        const response = await fetch(`/api/applications/${candidateId}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            finalStatus: 'rejected',
-            recruitmentStatus: 'rejected'
-          }),
-        });
-
-        if (!response.ok) throw new Error('Failed to reject candidate');
-      }
-      
-      // Refresh data
-      queryClient.invalidateQueries({ queryKey: ["/api/applications"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/applications/verified"] });
-
-      toast({
-        title: approved ? "Candidate Approved & Verified" : "Candidate Rejected",
-        description: approved ? "Candidate has been approved and verified for recruitment" : "Candidate has been rejected from recruitment",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update candidate status",
-        variant: "destructive",
-      });
-    }
-  };
-
   // Fetch verified users
   // Get verified users from recruitment candidates who are approved
   const verifiedUsers = recruitmentCandidates.filter((candidate: any) => 
@@ -850,7 +803,7 @@ export default function AdminPage() {
                       <MessageSquare className="h-6 w-6 text-purple-600" />
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm text-gray-600">Pending Interviews</p>
+                      <p className="text-sm text-gray-600">Pending Reviews</p>
                       <p className="text-2xl font-bold text-navy-800">
                         {recruitmentCandidates.filter((c: any) => c.recruitmentStatus === 'pending').length}
                       </p>
@@ -866,7 +819,7 @@ export default function AdminPage() {
                       <CheckCircle className="h-6 w-6 text-green-600" />
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm text-gray-600">Final Approved</p>
+                      <p className="text-sm text-gray-600">Approved</p>
                       <p className="text-2xl font-bold text-navy-800">
                         {recruitmentCandidates.filter((c: any) => c.finalStatus === 'approved').length}
                       </p>
@@ -902,7 +855,6 @@ export default function AdminPage() {
                   <TabsList>
                     <TabsTrigger value="all">All Candidates</TabsTrigger>
                     <TabsTrigger value="pending">Pending Review</TabsTrigger>
-                    <TabsTrigger value="reviewed">Reviewed</TabsTrigger>
                     <TabsTrigger value="accepted">Accepted</TabsTrigger>
                     <TabsTrigger value="rejected">Rejected</TabsTrigger>
                   </TabsList>
@@ -1030,43 +982,6 @@ export default function AdminPage() {
                                     No Video
                                   </Button>
                                 )}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                    ))}
-                  </TabsContent>
-                  
-                  <TabsContent value="reviewed" className="space-y-4">
-                    {recruitmentCandidates
-                      .filter((c: any) => c.recruitmentStatus === 'approved' || c.recruitmentStatus === 'rejected')
-                      .map((candidate: any) => (
-                        <Card key={candidate.id} className="hover:shadow-lg transition-shadow">
-                          <CardContent className="p-6">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-4">
-                                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
-                                  <CheckCircle className="h-8 w-8 text-purple-600" />
-                                </div>
-                                <div>
-                                  <h3 className="font-semibold text-navy-800">{candidate.name}</h3>
-                                  <p className="text-sm text-gray-600">Interviewed on {candidate.interviewScheduled}</p>
-                                  <p className="text-sm text-purple-600">Rating: ★ {candidate.rating}</p>
-                                </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <Button 
-                                  className="bg-green-600 hover:bg-green-700"
-                                  onClick={() => finalApproval(candidate.id, true)}
-                                >
-                                  Approve
-                                </Button>
-                                <Button 
-                                  variant="destructive"
-                                  onClick={() => finalApproval(candidate.id, false)}
-                                >
-                                  Reject
-                                </Button>
                               </div>
                             </div>
                           </CardContent>
