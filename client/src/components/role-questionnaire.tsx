@@ -25,8 +25,8 @@ interface TranslatorAnswers {
   experience: string;
   specializations: string[];
   sampleWork?: File;
-  availability: string;
   motivation: string;
+  customMotivation?: string;
 }
 
 interface TourGuideAnswers {
@@ -35,8 +35,8 @@ interface TourGuideAnswers {
   languages: string[];
   culturalKnowledge: 'basic' | 'intermediate' | 'advanced' | '';
   publicSpeaking: 'yes' | 'no' | '';
-  availability: string[];
   motivation: string;
+  customMotivation?: string;
 }
 
 interface RoleQuestionnaireProps {
@@ -116,7 +116,6 @@ export default function RoleQuestionnaire({ selectedRole, onComplete, onBack }: 
     fluentLanguages: [],
     experience: '',
     specializations: [],
-    availability: 'Will be set up in dashboard', // Default value
     motivation: ''
   });
 
@@ -127,7 +126,6 @@ export default function RoleQuestionnaire({ selectedRole, onComplete, onBack }: 
     languages: [],
     culturalKnowledge: '',
     publicSpeaking: '',
-    availability: ['Will be set up in dashboard'], // Default value
     motivation: ''
   });
 
@@ -154,14 +152,16 @@ export default function RoleQuestionnaire({ selectedRole, onComplete, onBack }: 
   const isTranslatorValid = translatorAnswers.fluentLanguages.length > 0 && 
                            translatorAnswers.experience.trim() !== '' && 
                            translatorAnswers.specializations.length > 0 && 
-                           translatorAnswers.motivation.trim() !== '';
+                           translatorAnswers.motivation.trim() !== '' &&
+                           (translatorAnswers.motivation !== "Others" || (translatorAnswers.customMotivation && translatorAnswers.customMotivation.trim() !== ''));
 
   const isTourGuideValid = tourGuideAnswers.experience.trim() !== '' && 
                           tourGuideAnswers.cities.length > 0 && 
                           tourGuideAnswers.languages.length > 0 && 
                           tourGuideAnswers.culturalKnowledge !== '' && 
                           tourGuideAnswers.publicSpeaking !== '' && 
-                          tourGuideAnswers.motivation.trim() !== '';
+                          tourGuideAnswers.motivation.trim() !== '' &&
+                          (tourGuideAnswers.motivation !== "Others" || (tourGuideAnswers.customMotivation && tourGuideAnswers.customMotivation.trim() !== ''));
 
   const shouldShowTranslator = selectedRole === 'translator';
   const shouldShowTourGuide = selectedRole === 'tour_guide';
@@ -255,20 +255,34 @@ export default function RoleQuestionnaire({ selectedRole, onComplete, onBack }: 
               )}
             </div>
 
-         
-
             {/* Motivation */}
             <div className="space-y-2">
               <Label htmlFor="translator-motivation" className="text-base font-medium">
                 Mengapa Anda ingin bekerja sebagai penerjemah? *
               </Label>
-              <Textarea
-                id="translator-motivation"
-                placeholder="Ceritakan motivasi dan tujuan Anda menjadi penerjemah..."
-                value={translatorAnswers.motivation}
-                onChange={(e) => setTranslatorAnswers(prev => ({ ...prev, motivation: e.target.value }))}
-                className="min-h-[100px]"
-              />
+              <Select value={translatorAnswers.motivation} onValueChange={(value) => setTranslatorAnswers(prev => ({ ...prev, motivation: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih alasan utama" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Penghasilan Tambahan">Penghasilan Tambahan</SelectItem>
+                  <SelectItem value="Mengisi waktu luang">Mengisi waktu luang</SelectItem>
+                  <SelectItem value="Melatih Penggunaan Bahasa">Melatih Penggunaan Bahasa</SelectItem>
+                  <SelectItem value="Mendapat Koneksi">Mendapat Koneksi</SelectItem>
+                  <SelectItem value="Tambah pengalaman kerja">Tambah pengalaman kerja</SelectItem>
+                  <SelectItem value="Menjadi alasan untuk explore kota">Menjadi alasan untuk explore kota</SelectItem>
+                  <SelectItem value="Others">Lainnya</SelectItem>
+                </SelectContent>
+              </Select>
+              {translatorAnswers.motivation === "Others" && (
+                <Textarea
+                  placeholder="Tuliskan alasan Anda..."
+                  value={translatorAnswers.customMotivation || ''}
+                  onChange={(e) => setTranslatorAnswers(prev => ({ ...prev, customMotivation: e.target.value }))}
+                  className="min-h-[80px] mt-2"
+                  required
+                />
+              )}
             </div>
 
             {/* Action Buttons */}
@@ -322,51 +336,37 @@ export default function RoleQuestionnaire({ selectedRole, onComplete, onBack }: 
             {/* Cities */}
             <div className="space-y-3">
               <Label className="text-base font-medium">Kota atau lokasi utama yang bisa Anda guide *</Label>
-              <div className="grid grid-cols-2 gap-3">
-                {MAJOR_CITIES.map(city => (
-                  <div key={city} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={city}
-                      checked={tourGuideAnswers.cities.includes(city)}
-                      onCheckedChange={() => 
-                        toggleArrayItem(
-                          tourGuideAnswers.cities, 
-                          city, 
-                          (items) => setTourGuideAnswers(prev => ({ ...prev, cities: items }))
-                        )
-                      }
-                    />
-                    <Label htmlFor={city} className="text-sm">{city}</Label>
-                  </div>
-                ))}
-              </div>
-              {tourGuideAnswers.cities.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {tourGuideAnswers.cities.map(city => (
-                    <Badge key={city} variant="secondary">{city}</Badge>
+              <Select value={tourGuideAnswers.cities[0] || ''} onValueChange={(value) => setTourGuideAnswers(prev => ({ ...prev, cities: [value] }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih kota utama" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MAJOR_CITIES.map(city => (
+                    <SelectItem key={city} value={city}>{city}</SelectItem>
                   ))}
-                </div>
-              )}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Languages */}
             <div className="space-y-3">
-              <Label className="text-base font-medium">Bahasa yang bisa Anda gunakan untuk guide *</Label>
+              <Label className="text-base font-medium">Pilih semua bahasa *</Label>
+              <p className="text-sm text-gray-600">Pilih semua bahasa yang Anda kuasai dengan lancar (bisa pilih lebih dari 1)</p>
               <div className="grid grid-cols-2 gap-3">
-                {GUIDE_LANGUAGES.map(lang => (
-                  <div key={lang} className="flex items-center space-x-2">
+                {FLUENT_LANGUAGES.map(language => (
+                  <div key={language} className="flex items-center space-x-2">
                     <Checkbox
-                      id={lang}
-                      checked={tourGuideAnswers.languages.includes(lang)}
+                      id={language}
+                      checked={tourGuideAnswers.languages.includes(language)}
                       onCheckedChange={() => 
                         toggleArrayItem(
                           tourGuideAnswers.languages, 
-                          lang, 
+                          language, 
                           (items) => setTourGuideAnswers(prev => ({ ...prev, languages: items }))
                         )
                       }
                     />
-                    <Label htmlFor={lang} className="text-sm">{lang}</Label>
+                    <Label htmlFor={language} className="text-sm">{language}</Label>
                   </div>
                 ))}
               </div>
@@ -425,19 +425,34 @@ export default function RoleQuestionnaire({ selectedRole, onComplete, onBack }: 
               </RadioGroup>
             </div>
 
-       
             {/* Motivation */}
             <div className="space-y-2">
               <Label htmlFor="guide-motivation" className="text-base font-medium">
                 Mengapa Anda ingin bekerja sebagai tour guide? *
               </Label>
-              <Textarea
-                id="guide-motivation"
-                placeholder="Ceritakan motivasi dan tujuan Anda menjadi tour guide..."
-                value={tourGuideAnswers.motivation}
-                onChange={(e) => setTourGuideAnswers(prev => ({ ...prev, motivation: e.target.value }))}
-                className="min-h-[100px]"
-              />
+              <Select value={tourGuideAnswers.motivation} onValueChange={(value) => setTourGuideAnswers(prev => ({ ...prev, motivation: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih alasan utama" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Penghasilan Tambahan">Penghasilan Tambahan</SelectItem>
+                  <SelectItem value="Mengisi waktu luang">Mengisi waktu luang</SelectItem>
+                  <SelectItem value="Melatih Penggunaan Bahasa">Melatih Penggunaan Bahasa</SelectItem>
+                  <SelectItem value="Mendapat Koneksi">Mendapat Koneksi</SelectItem>
+                  <SelectItem value="Tambah pengalaman kerja">Tambah pengalaman kerja</SelectItem>
+                  <SelectItem value="Menjadi alasan untuk explore kota">Menjadi alasan untuk explore kota</SelectItem>
+                  <SelectItem value="Others">Lainnya</SelectItem>
+                </SelectContent>
+              </Select>
+              {tourGuideAnswers.motivation === "Others" && (
+                <Textarea
+                  placeholder="Tuliskan alasan Anda..."
+                  value={tourGuideAnswers.customMotivation || ''}
+                  onChange={(e) => setTourGuideAnswers(prev => ({ ...prev, customMotivation: e.target.value }))}
+                  className="min-h-[80px] mt-2"
+                  required
+                />
+              )}
             </div>
 
             {/* Action Buttons */}

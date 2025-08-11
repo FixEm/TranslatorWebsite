@@ -105,7 +105,11 @@ export default function AvailabilityCalendar({
     return dates;
   };
 
-  const monthDates = getMonthDates(selectedMonth);
+  // Generate dates for 2 months
+  const firstMonth = selectedMonth;
+  const secondMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1);
+  const firstMonthDates = getMonthDates(firstMonth);
+  const secondMonthDates = getMonthDates(secondMonth);
 
   // Format date to YYYY-MM-DD
   const formatDate = (date: Date) => {
@@ -164,7 +168,8 @@ export default function AvailabilityCalendar({
     setAvailability(prev => {
       const newSchedule = [...prev.schedule];
       
-      monthDates.forEach(({ date, isCurrentMonth }) => {
+      // Apply to both months
+      [...firstMonthDates, ...secondMonthDates].forEach(({ date, isCurrentMonth }) => {
         if (!isCurrentMonth) return;
         
         const dateStr = formatDate(date);
@@ -195,7 +200,7 @@ export default function AvailabilityCalendar({
 
     toast({
       title: "Pola Berulang Diterapkan",
-      description: "Jadwal berulang telah diterapkan ke bulan ini."
+      description: "Jadwal berulang telah diterapkan ke kedua bulan."
     });
   };
 
@@ -295,7 +300,8 @@ export default function AvailabilityCalendar({
     setAvailability(prev => {
       const newSchedule = [...prev.schedule];
       
-      monthDates.forEach(({ date, isCurrentMonth }) => {
+      // Apply to both months
+      [...firstMonthDates, ...secondMonthDates].forEach(({ date, isCurrentMonth }) => {
         if (!isCurrentMonth) return;
         
         const dateStr = formatDate(date);
@@ -323,7 +329,10 @@ export default function AvailabilityCalendar({
       ...prev,
       schedule: prev.schedule.filter(d => {
         const date = new Date(d.date);
-        return date.getMonth() !== selectedMonth.getMonth() || date.getFullYear() !== selectedMonth.getFullYear();
+        // Remove dates from both visible months
+        const isFirstMonth = date.getMonth() === selectedMonth.getMonth() && date.getFullYear() === selectedMonth.getFullYear();
+        const isSecondMonth = date.getMonth() === secondMonth.getMonth() && date.getFullYear() === secondMonth.getFullYear();
+        return !isFirstMonth && !isSecondMonth;
       }),
       lastUpdated: new Date()
     }));
@@ -376,7 +385,7 @@ export default function AvailabilityCalendar({
                 Tandai Semua Bulan Tersedia
               </Button>
               <Button variant="outline" size="sm" onClick={clearAllAvailability}>
-                Kosongkan Bulan Ini
+                Kosongkan Kedua Bulan
               </Button>
               <Button variant="outline" size="sm" onClick={applyRecurringPatterns}>
                 Terapkan Pola Berulang
@@ -512,73 +521,157 @@ export default function AvailabilityCalendar({
             </div>
           </div>
           <p className="text-sm text-gray-600">
-            {selectedMonth.toLocaleDateString('id-ID', { 
+            {firstMonth.toLocaleDateString('id-ID', { 
+              year: 'numeric', 
+              month: 'long'
+            })} - {secondMonth.toLocaleDateString('id-ID', { 
               year: 'numeric', 
               month: 'long'
             })}
           </p>
         </CardHeader>
         <CardContent>
-          {/* Calendar Grid */}
-          <div className="grid grid-cols-7 gap-2 text-sm">
-            {/* Header - Days of week */}
-            {dayNames.map((day) => (
-              <div key={day} className="font-semibold p-2 text-center text-gray-600">
-                {day.slice(0, 3)}
-              </div>
-            ))}
-
-            {/* Calendar Dates */}
-            {monthDates.map(({ date, isCurrentMonth, isToday }, index) => {
-              const dateStr = formatDate(date);
-              const isAvailable = isDateAvailable(dateStr);
-              const isUnavailable = isDateUnavailable(dateStr);
-              const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
-              
-              return (
-                <button
-                  key={index}
-                  className={`
-                    p-3 border rounded-lg transition-all duration-200 min-h-[48px] flex items-center justify-center
-                    ${!isCurrentMonth 
-                      ? 'text-gray-300 bg-gray-50 cursor-default' 
-                      : isPast
-                        ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
-                        : isUnavailable 
-                          ? 'bg-red-100 border-red-200 text-red-700 cursor-not-allowed' 
-                          : isAvailable 
-                            ? 'bg-green-100 border-green-300 text-green-800 hover:bg-green-200' 
-                            : 'bg-white border-gray-200 text-gray-700 hover:bg-blue-50 hover:border-blue-300'
-                    }
-                    ${isToday ? 'ring-2 ring-blue-400' : ''}
-                    ${readOnly ? 'cursor-default' : ''}
-                  `}
-                  onClick={() => 
-                    !readOnly && isCurrentMonth && !isPast && !isUnavailable && toggleDate(dateStr)
-                  }
-                  disabled={readOnly || !isCurrentMonth || isPast || isUnavailable}
-                  title={
-                    isUnavailable 
-                      ? 'Tidak tersedia (periode liburan/ujian)' 
-                      : isAvailable 
-                        ? 'Tersedia - Klik untuk batalkan'
-                        : 'Tidak tersedia - Klik untuk tandai tersedia'
-                  }
-                >
-                  <div className="text-center">
-                    <div className={`${isToday ? 'font-bold' : ''}`}>
-                      {date.getDate()}
-                    </div>
-                    {isAvailable && !isUnavailable && (
-                      <div className="w-2 h-2 bg-green-500 rounded-full mx-auto mt-1"></div>
-                    )}
-                    {isUnavailable && (
-                      <div className="w-2 h-2 bg-red-500 rounded-full mx-auto mt-1"></div>
-                    )}
+          {/* Two Month Calendar Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* First Month */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 text-center">
+                {firstMonth.toLocaleDateString('id-ID', { 
+                  year: 'numeric', 
+                  month: 'long'
+                })}
+              </h3>
+              <div className="grid grid-cols-7 gap-2 text-sm">
+                {/* Header - Days of week */}
+                {dayNames.map((day) => (
+                  <div key={day} className="font-semibold p-2 text-center text-gray-600">
+                    {day.slice(0, 3)}
                   </div>
-                </button>
-              );
-            })}
+                ))}
+
+                {/* Calendar Dates */}
+                {firstMonthDates.map(({ date, isCurrentMonth, isToday }, index) => {
+                  const dateStr = formatDate(date);
+                  const isAvailable = isDateAvailable(dateStr);
+                  const isUnavailable = isDateUnavailable(dateStr);
+                  const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
+                  
+                  return (
+                    <button
+                      key={index}
+                      className={`
+                        p-3 border rounded-lg transition-all duration-200 min-h-[48px] flex items-center justify-center
+                        ${!isCurrentMonth 
+                          ? 'text-gray-300 bg-gray-50 cursor-default' 
+                          : isPast
+                            ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                            : isUnavailable 
+                              ? 'bg-red-100 border-red-200 text-red-700 cursor-not-allowed' 
+                              : isAvailable 
+                                ? 'bg-green-100 border-green-300 text-green-800 hover:bg-green-200' 
+                                : 'bg-white border-gray-200 text-gray-700 hover:bg-blue-50 hover:border-blue-300'
+                        }
+                        ${isToday ? 'ring-2 ring-blue-400' : ''}
+                        ${readOnly ? 'cursor-default' : ''}
+                      `}
+                      onClick={() => 
+                        !readOnly && isCurrentMonth && !isPast && !isUnavailable && toggleDate(dateStr)
+                      }
+                      disabled={readOnly || !isCurrentMonth || isPast || isUnavailable}
+                      title={
+                        isUnavailable 
+                          ? 'Tidak tersedia (periode liburan/ujian)' 
+                          : isAvailable 
+                            ? 'Tersedia - Klik untuk batalkan'
+                            : 'Tidak tersedia - Klik untuk tandai tersedia'
+                      }
+                    >
+                      <div className="text-center">
+                        <div className={`${isToday ? 'font-bold' : ''}`}>
+                          {date.getDate()}
+                        </div>
+                        {isAvailable && !isUnavailable && (
+                          <div className="w-2 h-2 bg-green-500 rounded-full mx-auto mt-1"></div>
+                        )}
+                        {isUnavailable && (
+                          <div className="w-2 h-2 bg-red-500 rounded-full mx-auto mt-1"></div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Second Month */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 text-center">
+                {secondMonth.toLocaleDateString('id-ID', { 
+                  year: 'numeric', 
+                  month: 'long'
+                })}
+              </h3>
+              <div className="grid grid-cols-7 gap-2 text-sm">
+                {/* Header - Days of week */}
+                {dayNames.map((day) => (
+                  <div key={day} className="font-semibold p-2 text-center text-gray-600">
+                    {day.slice(0, 3)}
+                  </div>
+                ))}
+
+                {/* Calendar Dates */}
+                {secondMonthDates.map(({ date, isCurrentMonth, isToday }, index) => {
+                  const dateStr = formatDate(date);
+                  const isAvailable = isDateAvailable(dateStr);
+                  const isUnavailable = isDateUnavailable(dateStr);
+                  const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
+                  
+                  return (
+                    <button
+                      key={index}
+                      className={`
+                        p-3 border rounded-lg transition-all duration-200 min-h-[48px] flex items-center justify-center
+                        ${!isCurrentMonth 
+                          ? 'text-gray-300 bg-gray-50 cursor-default' 
+                          : isPast
+                            ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                            : isUnavailable 
+                              ? 'bg-red-100 border-red-200 text-red-700 cursor-not-allowed' 
+                              : isAvailable 
+                                ? 'bg-green-100 border-green-300 text-green-800 hover:bg-green-200' 
+                                : 'bg-white border-gray-200 text-gray-700 hover:bg-blue-50 hover:border-blue-300'
+                        }
+                        ${isToday ? 'ring-2 ring-blue-400' : ''}
+                        ${readOnly ? 'cursor-default' : ''}
+                      `}
+                      onClick={() => 
+                        !readOnly && isCurrentMonth && !isPast && !isUnavailable && toggleDate(dateStr)
+                      }
+                      disabled={readOnly || !isCurrentMonth || isPast || isUnavailable}
+                      title={
+                        isUnavailable 
+                          ? 'Tidak tersedia (periode liburan/ujian)' 
+                          : isAvailable 
+                            ? 'Tersedia - Klik untuk batalkan'
+                            : 'Tidak tersedia - Klik untuk tandai tersedia'
+                      }
+                    >
+                      <div className="text-center">
+                        <div className={`${isToday ? 'font-bold' : ''}`}>
+                          {date.getDate()}
+                        </div>
+                        {isAvailable && !isUnavailable && (
+                          <div className="w-2 h-2 bg-green-500 rounded-full mx-auto mt-1"></div>
+                        )}
+                        {isUnavailable && (
+                          <div className="w-2 h-2 bg-red-500 rounded-full mx-auto mt-1"></div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Legend */}
@@ -707,7 +800,45 @@ export default function AvailabilityCalendar({
 
       {/* Last Updated */}
       <div className="text-center text-sm text-gray-500">
-        Terakhir diperbarui: {availability.lastUpdated.toLocaleString('id-ID')}
+        Terakhir diperbarui: {(() => {
+          try {
+            // Handle different types of date objects
+            const lastUpdated = availability.lastUpdated as any;
+            
+            if (!lastUpdated) {
+              return 'Tidak diketahui';
+            }
+            
+            // If it's already a Date object
+            if (lastUpdated instanceof Date) {
+              return lastUpdated.toLocaleString('id-ID');
+            }
+            
+            // If it's a Firestore timestamp object with _seconds
+            if (typeof lastUpdated === 'object' && lastUpdated._seconds) {
+              const date = new Date(lastUpdated._seconds * 1000);
+              return date.toLocaleString('id-ID');
+            }
+            
+            // If it's a string, try to parse it
+            if (typeof lastUpdated === 'string') {
+              const date = new Date(lastUpdated);
+              return isNaN(date.getTime()) ? 'Format tanggal tidak valid' : date.toLocaleString('id-ID');
+            }
+            
+            // If it's a number (timestamp)
+            if (typeof lastUpdated === 'number') {
+              const date = new Date(lastUpdated);
+              return date.toLocaleString('id-ID');
+            }
+            
+            // Fallback
+            return 'Format tanggal tidak dikenal';
+          } catch (error) {
+            console.error('Error formatting lastUpdated:', error);
+            return 'Error format tanggal';
+          }
+        })()}
       </div>
     </div>
   );

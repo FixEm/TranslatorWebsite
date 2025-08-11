@@ -296,6 +296,14 @@ export const insertApplicationSchema = createInsertSchema(applications).omit({
   googleId: z.string().optional(),
   studentEmail: z.string().optional(),
   questionnaireData: z.any().optional(), // Allow any questionnaire structure
+  // Make certain fields optional with defaults
+  description: z.string().default(""),
+  services: z.array(z.string()).default([]),
+  certificates: z.array(z.string()).default([]),
+  profileImage: z.string().nullable().default(null),
+  identityDocument: z.string().nullable().default(null),
+  pricePerDay: z.string().default("0"),
+  experience: z.string().default(""),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Password dan konfirmasi password tidak sama",
   path: ["confirmPassword"],

@@ -62,8 +62,8 @@ function useSearchParams() {
     // Listen for popstate events (back/forward navigation)
     window.addEventListener('popstate', updateSearchParams);
     
-    // Poll for changes in case the URL is changed programmatically
-    const interval = setInterval(updateSearchParams, 100);
+    // Check for URL changes periodically but less frequently
+    const interval = setInterval(updateSearchParams, 1000); // Every 1 second instead of 100ms
 
     return () => {
       window.removeEventListener('popstate', updateSearchParams);
@@ -221,7 +221,7 @@ export default function TranslatorDashboard() {
     };
 
     fetchApplicationData();
-  }, [user]);
+  }, [user?.email]); // Only depend on user.email, not the entire user object
 
   // Function to handle tab changes with URL updates
   const handleTabChange = (tabKey: string) => {
@@ -349,8 +349,13 @@ export default function TranslatorDashboard() {
     
     const appData = applicationData as any;
     
-    // Check if admin has approved
-    if (appData.verificationSteps?.adminApproved) {
+    // Check if application has been rejected
+    if (appData.recruitmentStatus === 'rejected' || appData.status === 'rejected') {
+      return 'rejected';
+    }
+    
+    // Check if admin has approved (check both adminApproved flag AND recruitmentStatus)
+    if (appData.verificationSteps?.adminApproved || appData.recruitmentStatus === 'approved') {
       return 'verified';
     }
     
@@ -360,6 +365,39 @@ export default function TranslatorDashboard() {
     }
     
     return 'unverified';
+  };
+
+  // Function to check if user can reapply (3 months after rejection)
+  const canReapply = () => {
+    if (!applicationData) return false;
+    
+    const appData = applicationData as any;
+    if (appData.recruitmentStatus !== 'rejected' && appData.status !== 'rejected') return true;
+    
+    // Check if 3 months have passed since rejection
+    const rejectionDate = appData.rejectedAt || appData.updatedAt;
+    if (!rejectionDate) return false;
+    
+    const rejectedAt = new Date(rejectionDate);
+    const threeMonthsLater = new Date(rejectedAt);
+    threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
+    
+    return new Date() >= threeMonthsLater;
+  };
+
+  // Function to get time until reapplication is allowed
+  const getReapplicationDate = () => {
+    if (!applicationData) return null;
+    
+    const appData = applicationData as any;
+    const rejectionDate = appData.rejectedAt || appData.updatedAt;
+    if (!rejectionDate) return null;
+    
+    const rejectedAt = new Date(rejectionDate);
+    const threeMonthsLater = new Date(rejectedAt);
+    threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
+    
+    return threeMonthsLater;
   };
 
   const formatCurrency = (amount: number) => {
@@ -504,6 +542,7 @@ export default function TranslatorDashboard() {
                 {getVerificationStatus() === 'verified' && 'Terverifikasi'}
                 {getVerificationStatus() === 'pending' && 'Menunggu Verifikasi'}
                 {getVerificationStatus() === 'unverified' && 'Belum Terverifikasi'}
+                {getVerificationStatus() === 'rejected' && 'Ditolak'}
               </Badge>
             </div>
             
@@ -581,19 +620,73 @@ export default function TranslatorDashboard() {
         return (
           <div>
             {applicationData ? (
-              <VerificationStatus 
-                userId={user?.uid}
-                applicationData={applicationData}
-                onUpdate={() => {
-                  // Refresh application data when verification updates
-                  if (user?.email) {
-                    fetch(`/api/applications/translator?email=${user.email}`)
-                      .then(res => res.json())
-                      .then(data => setApplicationData(data))
-                      .catch(console.error);
-                  }
-                }}
-              />
+              <div className="space-y-6">
+                {/* Rejection Banner */}
+                {getVerificationStatus() === 'rejected' && (
+                  <Card className="border-red-200 bg-red-50">
+                    <CardContent className="p-6">
+                      <div className="flex items-start space-x-3">
+                        <div className="text-red-500 text-2xl">❌</div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-bold text-red-800 mb-2">
+                            Pendaftaran Ditolak
+                          </h3>
+                          <p className="text-red-700 mb-4">
+                            Mohon maaf, setelah meninjau aplikasi Anda, kami memutuskan untuk tidak melanjutkan proses pendaftaran Anda sebagai penerjemah/pemandu wisata.
+                          </p>
+                          
+                          {/* Rejection reason if available */}
+                          {(applicationData as any)?.rejectionReason && (
+                            <div className="mb-4 p-3 bg-red-100 border border-red-200 rounded-lg">
+                              <h4 className="font-medium text-red-800 mb-1">Alasan Penolakan:</h4>
+                              <p className="text-sm text-red-700">{(applicationData as any).rejectionReason}</p>
+                            </div>
+                          )}
+                          
+                          {/* Reapplication policy */}
+                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                            <h4 className="font-medium text-orange-800 mb-1">Kebijakan Pendaftaran Ulang:</h4>
+                            {canReapply() ? (
+                              <p className="text-sm text-orange-700">
+                                ✅ Anda sudah dapat mengajukan pendaftaran ulang. Silakan hubungi admin untuk memulai proses baru.
+                              </p>
+                            ) : (
+                              <p className="text-sm text-orange-700">
+                                🕒 Anda dapat mengajukan pendaftaran ulang setelah{' '}
+                                <strong>
+                                  {getReapplicationDate()?.toLocaleDateString('id-ID', {
+                                    day: 'numeric',
+                                    month: 'long',
+                                    year: 'numeric'
+                                  })}
+                                </strong>
+                                {' '}(3 bulan setelah penolakan).
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Verification Status Component - disabled if rejected and can't reapply */}
+                <div className={getVerificationStatus() === 'rejected' && !canReapply() ? 'opacity-50 pointer-events-none' : ''}>
+                  <VerificationStatus 
+                    userId={user?.uid}
+                    applicationData={applicationData}
+                    onUpdate={() => {
+                      // Refresh application data when verification updates
+                      if (user?.email) {
+                        fetch(`/api/applications/translator?email=${user.email}`)
+                          .then(res => res.json())
+                          .then(data => setApplicationData(data))
+                          .catch(console.error);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
             ) : (
               <div className="text-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-navy-600 mx-auto mb-4"></div>
@@ -700,7 +793,7 @@ export default function TranslatorDashboard() {
               <CardContent>
                 <div className="space-y-3">
                   {/* Verification Status Notification */}
-                  {(applicationData as any)?.verificationSteps?.adminApproved && (
+                  {((applicationData as any)?.verificationSteps?.adminApproved || (applicationData as any)?.recruitmentStatus === 'approved') && (
                     <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                       <div className="flex items-center gap-2">
                         <div className="text-green-600">✅</div>
@@ -743,7 +836,7 @@ export default function TranslatorDashboard() {
 
                   {/* No notifications message */}
                   {(!(applicationData as any)?.changeRequests?.requests || (applicationData as any).changeRequests.requests.length === 0) &&
-                   (applicationData as any)?.verificationSteps?.adminApproved &&
+                   ((applicationData as any)?.verificationSteps?.adminApproved || (applicationData as any)?.recruitmentStatus === 'approved') &&
                    user?.emailVerified &&
                    (applicationData as any)?.completenessScore >= 80 && (
                     <div className="text-center py-8">
@@ -901,6 +994,7 @@ export default function TranslatorDashboard() {
                   {getVerificationStatus() === 'verified' && 'Terverifikasi'}
                   {getVerificationStatus() === 'pending' && 'Menunggu'}
                   {getVerificationStatus() === 'unverified' && 'Belum Terverifikasi'}
+                  {getVerificationStatus() === 'rejected' && 'Ditolak'}
                 </Badge>
               </div>
             </div>

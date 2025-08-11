@@ -35,6 +35,7 @@ interface TranslatorApplication {
   university: string;
   expectedGraduation: string;
   motivation: string;
+  customMotivation?: string;
   intent: 'translator' | 'tour_guide';
   yearsInChina?: number;
   studentEmail?: string;
@@ -102,10 +103,11 @@ export default function TranslatorSignup() {
       // Prepare application data with questionnaire responses
       const applicationData = {
         ...application,
+        motivation: application.motivation === "Others" ? application.customMotivation : application.motivation,
         questionnaireData: questionnaireData
       };
       
-      const response = await fetch('/api/applications/translator', {
+      const response = await fetch('/api/applications/submit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -372,24 +374,13 @@ export default function TranslatorSignup() {
                       id="pricePerDay"
                       value={application.pricePerDay}
                       onChange={(e) => setApplication(prev => ({ ...prev, pricePerDay: e.target.value }))}
-                      placeholder="500 000"
+                      placeholder="Ex: 500 000"
                       type="number"
                       required
                     />
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="motivation">Mengapa Anda ingin bergabung dengan AyoCabut? *</Label>
-                  <Textarea
-                    id="motivation"
-                    value={application.motivation}
-                    onChange={(e) => setApplication(prev => ({ ...prev, motivation: e.target.value }))}
-                    placeholder="Ceritakan alasan Anda ingin bergabung dengan AyoCabut, seperti untuk mendapatkan penghasilan tambahan, meningkatkan kemampuan bahasa, mendapatkan koneksi, pengalaman pertukaran budaya, dll..."
-                    className="min-h-[100px]"
-                    required
-                  />
-                </div>
               </CardContent>
               <CardFooter className="flex justify-between">
                 <Button variant="outline" onClick={() => setCurrentStep(2)}>
