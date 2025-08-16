@@ -1094,22 +1094,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updateApplicationField(id, `${documentType}AdminNotes`, adminNotes);
       }
 
-      // Update overall verification progress
+      // Update overall verification progress using completeness score
       const application = await storage.getApplicationById(id);
       if (application) {
         const verificationSteps = application.verificationSteps as any || {};
-        let completedSteps = 0;
-        const totalSteps = 4; // email, studentId, hsk, cv
+        
+        // Calculate completeness score using the new point system
+        const points = {
+          emailVerified: 25,
+          studentIdUploaded: 20,
+          hskUploaded: 25,
+          cvUploaded: 20,
+          introVideoUploaded: 10,
+        };
+        
+        let score = 0;
+        if (verificationSteps.emailVerified) score += points.emailVerified;
+        if (verificationSteps.studentIdUploaded && verificationSteps.studentIdStatus === 'approved') score += points.studentIdUploaded;
+        if (verificationSteps.hskUploaded && verificationSteps.hskStatus === 'approved') score += points.hskUploaded;
+        if (verificationSteps.cvUploaded && verificationSteps.cvStatus === 'approved') score += points.cvUploaded;
+        if (verificationSteps.introVideoUploaded) score += points.introVideoUploaded;
 
-        console.log('📊 Current verification steps:', verificationSteps);
-
-        if (verificationSteps.emailVerified) completedSteps++;
-        if (verificationSteps.studentIdUploaded && verificationSteps.studentIdStatus === 'approved') completedSteps++;
-        if (verificationSteps.hskUploaded && verificationSteps.hskStatus === 'approved') completedSteps++;
-        if (verificationSteps.cvUploaded && verificationSteps.cvStatus === 'approved') completedSteps++;
-
-        const progress = Math.round((completedSteps / totalSteps) * 100);
-        console.log('📈 Calculated progress:', progress, 'from steps:', completedSteps, '/', totalSteps);
+        const progress = Math.min(score, 100);
+        console.log('📈 Calculated completeness score:', progress, 'from verification steps');
         
         await storage.updateApplicationField(id, 'completenessScore', progress);
       }

@@ -470,35 +470,8 @@ router.post('/applications/:id/upload/student-id', upload.single('studentId'), a
       throw storageError;
     }
     
-    // Update application with student ID document
+    // Update application with student ID document using the proper method
     await storage.updateStudentDocument(id, downloadURL);
-    
-    // Clear change request status for student ID if it exists
-    try {
-      const application = await storage.getApplication(id);
-      if (application && (application as any).verificationSteps) {
-        const updatedVerificationSteps = {
-          ...(application as any).verificationSteps,
-          studentIdStatus: 'pending', // Reset to pending for admin review
-          studentIdUploaded: true
-        };
-        await storage.updateApplicationField(id, 'verificationSteps', updatedVerificationSteps);
-        
-        // Clear change requests for studentId if they exist
-        if ((application as any).changeRequests) {
-          const updatedChangeRequests = {
-            ...(application as any).changeRequests,
-            requests: (application as any).changeRequests.requests.filter((req: any) => req.type !== 'studentId')
-          };
-          await storage.updateApplicationField(id, 'changeRequests', updatedChangeRequests);
-        }
-        
-        console.log('✅ Student ID change request status cleared');
-      }
-    } catch (error) {
-      console.error('⚠️ Error clearing change request status:', error);
-      // Continue anyway - the upload was successful
-    }
     
     res.json({
       success: true,
@@ -549,34 +522,8 @@ router.post('/applications/:id/upload/hsk', upload.single('hskCertificate'), asy
       throw storageError;
     }
     
+    // Update application with HSK certificate using the proper method
     await storage.updateHskCertificate(id, downloadURL);
-    
-    // Clear change request status for HSK if it exists
-    try {
-      const application = await storage.getApplication(id);
-      if (application && (application as any).verificationSteps) {
-        const updatedVerificationSteps = {
-          ...(application as any).verificationSteps,
-          hskStatus: 'pending', // Reset to pending for admin review
-          hskUploaded: true
-        };
-        await storage.updateApplicationField(id, 'verificationSteps', updatedVerificationSteps);
-        
-        // Clear change requests for HSK if they exist
-        if ((application as any).changeRequests) {
-          const updatedChangeRequests = {
-            ...(application as any).changeRequests,
-            requests: (application as any).changeRequests.requests.filter((req: any) => req.type !== 'hsk')
-          };
-          await storage.updateApplicationField(id, 'changeRequests', updatedChangeRequests);
-        }
-        
-        console.log('✅ HSK change request status cleared');
-      }
-    } catch (error) {
-      console.error('⚠️ Error clearing HSK change request status:', error);
-      // Continue anyway - the upload was successful
-    }
     
     res.json({
       success: true,
@@ -619,22 +566,16 @@ router.post('/applications/:id/upload/cv', upload.single('cvDocument'), async (r
       resumable: false
     });
 
-    // Get the download URL
-    const [downloadURL] = await fileRef.getSignedUrl({
-      action: 'read',
-      expires: '12-31-2030' // Far future expiry date
-    });
+    // Make the file publicly accessible
+    await fileRef.makePublic();
+    
+    // Generate public download URL - include the full path with 'cvs/' folder
+    const downloadURL = `https://storage.googleapis.com/${firebaseStorage.bucket().name}/cvs/${fileName}`;
 
     console.log('✅ CV uploaded successfully:', downloadURL);
 
-    // Update the application in Firestore and clear change requests
-    try {
-      await storage.updateCvDocument(id, downloadURL);
-      console.log('✅ Application updated with CV info');
-    } catch (updateError) {
-      console.error('⚠️ Error updating application (file uploaded successfully):', updateError);
-      // Continue anyway - the upload was successful
-    }
+    // Update the application in Firestore using the proper method
+    await storage.updateCvDocument(id, downloadURL);
     
     res.json({
       success: true,
@@ -664,7 +605,7 @@ router.post('/applications/:id/upload/intro-video', async (req, res) => {
     
     console.log(`📹 Uploading intro video for application ${id}:`, { videoUrl });
     
-    // Update the application with video URL
+    // Update the application with video URL using the proper method
     await storage.updateIntroVideo(id, videoUrl);
     
     console.log('✅ Intro video URL saved successfully');
@@ -684,11 +625,16 @@ router.post('/applications/:id/upload/intro-video', async (req, res) => {
 router.post('/applications/:id/verify-email', async (req, res) => {
   try {
     const { id } = req.params;
-    const updatedProvider = await storage.verifyEmail(id);
+    
+    // Update verification steps to mark email as verified
+    await storage.updateApplicationField(id, 'verificationSteps.emailVerified', true);
+    
+    // Get updated application
+    const updatedApplication = await storage.getApplication(id);
     
     res.json({
       success: true,
-      provider: updatedProvider
+      provider: updatedApplication
     });
   } catch (error) {
     console.error('Error verifying email:', error);
@@ -730,6 +676,7 @@ router.post('/admin/applications/:id/approve', async (req, res) => {
     const { id } = req.params;
     const { adminNotes } = req.body;
     
+    // Update application status to approved using the proper method
     await storage.approveApplication(id, adminNotes);
     
     res.json({
@@ -748,6 +695,7 @@ router.post('/admin/applications/:id/reject', async (req, res) => {
     const { id } = req.params;
     const { adminNotes } = req.body;
     
+    // Update application status to rejected using the proper method
     await storage.rejectApplication(id, adminNotes);
     
     res.json({

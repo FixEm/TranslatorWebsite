@@ -104,7 +104,6 @@ export interface FirebaseServiceProvider {
     hskStatus?: 'pending' | 'approved' | 'rejected';
     studentIdStatus?: 'pending' | 'approved' | 'rejected';
     cvStatus?: 'pending' | 'approved' | 'rejected';
-    availabilitySet?: boolean;
   };
   completenessScore: number; // 0-100
   studentEmail?: string; // for .ac.id or .edu.cn verification
@@ -173,7 +172,6 @@ export interface FirebaseApplication {
     hskStatus?: 'pending' | 'approved' | 'rejected';
     studentIdStatus?: 'pending' | 'approved' | 'rejected';
     cvStatus?: 'pending' | 'approved' | 'rejected';
-    availabilitySet?: boolean;
   };
   completenessScore: number;
   studentEmail?: string;

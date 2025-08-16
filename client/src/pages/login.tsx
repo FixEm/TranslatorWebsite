@@ -148,7 +148,7 @@ export default function LoginPage() {
 
                   <Button
                     type="submit"
-                    className="w-full text-white h-12 text-lg font-semibold hover:bg-premium"
+                    className="w-full text-white h-12 text-lg font-semibold hover:bg-premium bg-red-700 hover:bg-red-800"
                     disabled={isLoading}
                   >
                     {isLoading ? (
@@ -175,7 +175,7 @@ export default function LoginPage() {
 
                 <div className="mt-6 space-y-3">
                   <Link href="/translator/signup">
-                    <Button variant="outline" className="w-full h-12">
+                    <Button variant="outline" className="w-full h-12 hover:bg-red-800">
                       <UserPlus className="mr-2 h-5 w-5" />
                       Daftar Sebagai Penerjemah
                     </Button>

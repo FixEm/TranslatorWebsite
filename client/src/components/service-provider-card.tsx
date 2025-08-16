@@ -84,7 +84,7 @@ export default function ServiceProviderCard({ provider }: ServiceProviderCardPro
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xl font-bold text-slate-800 tracking-tight">{provider.name}</h3>
-          <span className="text-xl font-bold text-accent">¥{provider.pricePerDay}</span>
+          <span className="text-xl font-bold text-accent text-red-700">Rp {provider.pricePerDay}</span>
         </div>
         
         <div className="flex items-center mb-3">
@@ -160,7 +160,7 @@ export default function ServiceProviderCard({ provider }: ServiceProviderCardPro
         </div>
         
         <Link href={`/profile/${provider.id}`}>
-          <Button className="w-full bg-premium hover:bg-premium text-white font-semibold py-3 rounded-xl shadow-elegant hover:shadow-luxury transition-all duration-300 transform group-hover:scale-105">
+          <Button className="w-full bg-premium hover:bg-premium bg-red-700 hover:bg-red-800 text-white font-semibold py-3 rounded-xl shadow-elegant hover:shadow-luxury transition-all duration-300 transform group-hover:scale-105">
             {provider.isStudent ? 'Lihat Profil & Book Student' : 'Lihat Profil Lengkap'}
           </Button>
         </Link>

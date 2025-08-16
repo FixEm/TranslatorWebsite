@@ -83,7 +83,7 @@ export default function ProfileModal({ provider, isOpen, onClose }: ProfileModal
                     Terverifikasi
                   </Badge>
                 )}
-                <div className="text-2xl font-bold text-navy-600">¥{provider.pricePerDay}/hari</div>
+                <div className="text-2xl font-bold text-navy-600">Rp {provider.pricePerDay}/hari</div>
               </div>
             </div>
           </div>
@@ -144,7 +144,7 @@ export default function ProfileModal({ provider, isOpen, onClose }: ProfileModal
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <div className="text-sm text-gray-600">Tarif Dasar (per hari)</div>
-                        <div className="text-lg font-semibold text-navy-600">¥{provider.pricePerDay}</div>
+                        <div className="text-lg font-semibold text-navy-600">Rp{provider.pricePerDay}</div>
                       </div>
                       <div>
                         <div className="text-sm text-gray-600">Pengalaman</div>

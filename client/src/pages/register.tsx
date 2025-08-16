@@ -356,7 +356,7 @@ export default function RegisterPage() {
                       name="pricePerDay"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Tarif per Hari (¥) *</FormLabel>
+                          <FormLabel>Tarif per Hari (Rp) *</FormLabel>
                           <FormControl>
                             <Input type="number" placeholder="300" {...field} />
                           </FormControl>

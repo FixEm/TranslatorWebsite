@@ -347,11 +347,11 @@ export default function StudentBooking({ jobId, onBookingComplete }: StudentBook
                   <div className="flex items-center gap-1">
                     <DollarSign className="h-4 w-4 text-gray-600" />
                     <span className="text-lg font-bold text-navy-600">
-                      ¥{student.pricePerDay || 500000}/day
+                      Rp {student.pricePerDay || 500000}/day
                     </span>
                   </div>
                   <div className="text-sm text-gray-500">
-                    ≈ ¥{Math.round((student.pricePerDay || 500000) / 8)}/hour
+                    ≈ Rp {Math.round((student.pricePerDay || 500000) / 8)}/hour
                   </div>
                 </div>
 
