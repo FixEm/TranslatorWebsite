@@ -14,7 +14,7 @@ import { sendVerificationEmail } from "./email-service";
 const storage = new FirebaseStorage();
 
 const upload = multer({
-  dest: 'uploads/',
+  storage: multer.memoryStorage(), // Use memory storage since we're uploading to Firebase
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
@@ -705,6 +705,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Application update with file uploads (profile image, etc.)
+  app.patch("/api/applications/:id/upload", upload.fields([
+    { name: 'profileImage', maxCount: 1 },
+    { name: 'identityDocument', maxCount: 1 },
+    { name: 'certificates', maxCount: 5 }
+  ]), async (req, res) => {
+    try {
+      console.log("🔄 Updating application with files:", { id: req.params.id, files: req.files });
+      const { id } = req.params;
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+      const updates = req.body;
+      
+      // Get current application first
+      const currentApp = await storage.getApplication(id);
+      if (!currentApp) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      
+      // Handle file uploads to Firebase Storage
+      if (files?.profileImage?.[0]) {
+        try {
+          const profileImageUrl = await storage.uploadFileToStorage(files.profileImage[0], 'profile-images');
+          updates.profileImage = profileImageUrl;
+          console.log("✅ Profile image uploaded to Firebase:", profileImageUrl);
+        } catch (uploadError) {
+          console.error("❌ Error uploading profile image:", uploadError);
+          return res.status(500).json({ message: "Failed to upload profile image" });
+        }
+      }
+      
+      if (files?.identityDocument?.[0]) {
+        try {
+          const identityDocUrl = await storage.uploadFileToStorage(files.identityDocument[0], 'identity-documents');
+          updates.identityDocument = identityDocUrl;
+          console.log("✅ Identity document uploaded to Firebase:", identityDocUrl);
+        } catch (uploadError) {
+          console.error("❌ Error uploading identity document:", uploadError);
+          return res.status(500).json({ message: "Failed to upload identity document" });
+        }
+      }
+      
+      if (files?.certificates) {
+        try {
+          const certificateUrls = await Promise.all(
+            files.certificates.map(file => storage.uploadFileToStorage(file, 'certificates'))
+          );
+          updates.certificates = certificateUrls;
+          console.log("✅ Certificates uploaded to Firebase:", certificateUrls);
+        } catch (uploadError) {
+          console.error("❌ Error uploading certificates:", uploadError);
+          return res.status(500).json({ message: "Failed to upload certificates" });
+        }
+      }
+      
+      // Update each field provided in the request body
+      for (const [field, value] of Object.entries(updates)) {
+        await storage.updateApplicationField(id, field, value);
+      }
+      
+      // Get updated application
+      const updatedApp = await storage.getApplication(id);
+      
+      if (!updatedApp) {
+        return res.status(500).json({ message: "Failed to retrieve updated application" });
+      }
+      
+      console.log("✅ Application updated with files successfully");
+      res.json({ 
+        message: "Application updated successfully", 
+        application: updatedApp,
+        profileImage: updatedApp.profileImage // Return the Firebase Storage URL for immediate use
+      });
+    } catch (error) {
+      console.error("❌ Error updating application with files:", error);
+      res.status(500).json({ message: "Failed to update application" });
+    }
+  });
+
   // Create contact/inquiry
   app.post("/api/contacts", async (req, res) => {
     try {
@@ -1125,6 +1203,202 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('❌ Error getting availability:', error);
       res.status(500).json({ message: "Failed to get availability" });
+    }
+  });
+
+  // Create job
+  app.post('/api/jobs', async (req, res) => {
+    try {
+      console.log('🎯 Job creation request received:', req.body);
+      
+      const { userId, title, description, budget, deadline, category, skills, availability } = req.body;
+
+      if (!userId || !title || !description || !budget || !deadline || !category || !availability) {
+        return res.status(400).json({ message: 'Missing required fields' });
+      }
+
+      // Get user's application data to populate job with verified information
+      console.log('🔍 Looking for application data for userId:', userId);
+      const applications = await storage.getApplications();
+      const userApplication = applications.find(app => app.id === userId || (app as any).firebaseUid === userId);
+      
+      if (!userApplication) {
+        console.log('❌ No application found for userId:', userId);
+        return res.status(404).json({ message: 'User application not found' });
+      }
+
+      // Check if user is verified (admin approved)
+      const verificationSteps = (userApplication as any).verificationSteps || {};
+      const isVerified = verificationSteps.adminApproved && userApplication.status === 'approved';
+      
+      if (!isVerified) {
+        console.log('❌ User is not verified:', userId);
+        return res.status(403).json({ message: 'User is not verified. Complete verification process first.' });
+      }
+
+      console.log('✅ User is verified, creating job...');
+
+      // Create job with user's verified data
+      const jobData = {
+        userId,
+        title,
+        description,
+        budget: Number(budget),
+        deadline,
+        category,
+        skills: Array.isArray(skills) ? skills : [],
+        translatorName: userApplication.name,
+        translatorCity: userApplication.city,
+        translatorHskLevel: (userApplication as any).hskLevel || 'Not specified',
+        translatorExperience: userApplication.experience,
+        translatorServices: Array.isArray(userApplication.services) ? userApplication.services : [],
+        availability: {
+          isAvailable: true,
+          schedule: availability.schedule || [],
+          timezone: availability.timezone || 'Asia/Shanghai'
+        }
+      };
+
+      console.log('📝 Job data prepared:', { ...jobData, availability: 'Object with schedule' });
+
+      const createdJob = await storage.createJob(jobData);
+
+      console.log('✅ Job created successfully with ID:', createdJob.id);
+      res.status(201).json({ 
+        message: 'Job created successfully', 
+        job: createdJob 
+      });
+    } catch (error) {
+      console.error('❌ Error creating job:', error);
+      res.status(500).json({ message: 'Failed to create job' });
+    }
+  });
+
+  // Get jobs 
+  app.get('/api/jobs', async (req, res) => {
+    try {
+      const { userId, status, category } = req.query;
+      
+      const filters: any = {};
+      if (userId) filters.userId = userId as string;
+      if (status) filters.status = status as string;
+      if (category) filters.category = category as string;
+      
+      console.log('🔍 Getting jobs with filters:', filters);
+      const jobs = await storage.getJobs(filters);
+      
+      res.json(jobs);
+    } catch (error) {
+      console.error('❌ Error fetching jobs:', error);
+      res.status(500).json({ message: 'Failed to fetch jobs' });
+    }
+  });
+
+  // Get single job
+  app.get('/api/jobs/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const job = await storage.getJob(id);
+      
+      if (!job) {
+        return res.status(404).json({ message: 'Job not found' });
+      }
+      
+      res.json(job);
+    } catch (error) {
+      console.error('❌ Error fetching job:', error);
+      res.status(500).json({ message: 'Failed to fetch job' });
+    }
+  });
+
+  // ============================================================================
+  // BOOKING ENDPOINTS
+  // ============================================================================
+
+  // Create a new booking
+  app.post('/api/bookings', async (req, res) => {
+    try {
+      const bookingData = {
+        ...req.body,
+        id: Date.now().toString(),
+        createdAt: new Date(),
+        status: 'pending'
+      };
+
+      console.log('📅 Creating booking:', bookingData);
+      const booking = await storage.createBooking(bookingData);
+      
+      res.status(201).json(booking);
+    } catch (error) {
+      console.error('❌ Error creating booking:', error);
+      res.status(500).json({ message: 'Failed to create booking' });
+    }
+  });
+
+  // Get all bookings (admin)
+  app.get('/api/bookings', async (req, res) => {
+    try {
+      const { status, providerId, clientEmail } = req.query;
+      
+      const filters: any = {};
+      if (status) filters.status = status as string;
+      if (providerId) filters.providerId = providerId as string;
+      if (clientEmail) filters.clientEmail = clientEmail as string;
+      
+      console.log('🔍 Getting bookings with filters:', filters);
+      const bookings = await storage.getBookings(filters);
+      
+      res.json(bookings);
+    } catch (error) {
+      console.error('❌ Error fetching bookings:', error);
+      res.status(500).json({ message: 'Failed to fetch bookings' });
+    }
+  });
+
+  // Get bookings for a specific provider
+  app.get('/api/bookings/provider/:providerId', async (req, res) => {
+    try {
+      const { providerId } = req.params;
+      console.log('🔍 Getting bookings for provider:', providerId);
+      
+      const bookings = await storage.getBookingsByProvider(providerId);
+      res.json(bookings);
+    } catch (error) {
+      console.error('❌ Error fetching provider bookings:', error);
+      res.status(500).json({ message: 'Failed to fetch provider bookings' });
+    }
+  });
+
+  // Update booking status
+  app.patch('/api/bookings/:id/status', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, adminNotes } = req.body;
+      
+      console.log('📅 Updating booking status:', { id, status, adminNotes });
+      
+      const booking = await storage.updateBookingStatus(id, status, adminNotes);
+      res.json(booking);
+    } catch (error) {
+      console.error('❌ Error updating booking status:', error);
+      res.status(500).json({ message: 'Failed to update booking status' });
+    }
+  });
+
+  // Get single booking
+  app.get('/api/bookings/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const booking = await storage.getBooking(id);
+      
+      if (!booking) {
+        return res.status(404).json({ message: 'Booking not found' });
+      }
+      
+      res.json(booking);
+    } catch (error) {
+      console.error('❌ Error fetching booking:', error);
+      res.status(500).json({ message: 'Failed to fetch booking' });
     }
   });
 

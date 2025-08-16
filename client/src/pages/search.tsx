@@ -27,9 +27,45 @@ export default function SearchPage() {
       if (filters.city && filters.city !== "all") params.append('city', filters.city);
       if (filters.service && filters.service !== "all") params.append('services', filters.service);
       
-      const response = await fetch(`/api/service-providers?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch providers');
-      return response.json();
+      // Fetch both service providers and verified student translators
+      const [providersResponse, studentsResponse] = await Promise.all([
+        fetch(`/api/service-providers?${params}`),
+        fetch(`/api/applications/verified?${params}`)
+      ]);
+      
+      if (!providersResponse.ok) throw new Error('Failed to fetch providers');
+      if (!studentsResponse.ok) throw new Error('Failed to fetch students');
+      
+      const [providers, students] = await Promise.all([
+        providersResponse.json(),
+        studentsResponse.json()
+      ]);
+      
+      // Transform student applications to service provider format
+      const transformedStudents = students.map((student: any) => ({
+        id: student.id,
+        name: student.name,
+        email: student.email,
+        whatsapp: student.whatsapp,
+        city: student.city,
+        services: student.services || [],
+        experience: student.experience || "0",
+        pricePerDay: student.pricePerDay || "500000",
+        rating: "4.5", // Default rating for students
+        reviewCount: "New", // Indicate this is a new student
+        description: student.motivation || "Motivated student translator ready to help with your translation needs.",
+        profileImage: student.profileImage || "",
+        isVerified: true,
+        languages: student.languages || [],
+        availability: student.availability || null,
+        isStudent: true, // Flag to identify student translators
+        university: student.university,
+        expectedGraduation: student.expectedGraduation,
+        hskLevel: student.hskLevel
+      }));
+      
+      // Combine and return all translators
+      return [...providers, ...transformedStudents];
     }
   });
 

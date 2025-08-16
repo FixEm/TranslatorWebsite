@@ -44,6 +44,24 @@ interface AvailabilityCalendarProps {
 
 const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
+// Helper function to get current date in UTC+7
+const getCurrentDateUTC7 = () => {
+  const now = new Date();
+  // If we're already in UTC+7 timezone, just return the current date
+  // If we need to convert from a different timezone, we should use proper timezone conversion
+  // For now, let's use the local date to avoid the offset issue
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+};
+
+// Helper function to format date to YYYY-MM-DD in UTC+7
+const formatDateUTC7 = (date: Date) => {
+  // Use local date formatting to avoid timezone offset issues
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function AvailabilityCalendar({ 
   userId, 
   initialAvailability, 
@@ -60,7 +78,7 @@ export default function AvailabilityCalendar({
   });
 
   const [selectedMonth, setSelectedMonth] = useState<Date>(() => {
-    const today = new Date();
+    const today = getCurrentDateUTC7();
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
 
@@ -98,7 +116,7 @@ export default function AvailabilityCalendar({
       dates.push({
         date,
         isCurrentMonth: date.getMonth() === month,
-        isToday: date.toDateString() === new Date().toDateString()
+        isToday: date.toDateString() === getCurrentDateUTC7().toDateString()
       });
     }
     
@@ -111,9 +129,9 @@ export default function AvailabilityCalendar({
   const firstMonthDates = getMonthDates(firstMonth);
   const secondMonthDates = getMonthDates(secondMonth);
 
-  // Format date to YYYY-MM-DD
+  // Format date to YYYY-MM-DD using UTC+7
   const formatDate = (date: Date) => {
-    return date.toISOString().split('T')[0];
+    return formatDateUTC7(date);
   };
 
   // Check if date is available
@@ -348,7 +366,7 @@ export default function AvailabilityCalendar({
   };
 
   const goToThisMonth = () => {
-    const today = new Date();
+    const today = getCurrentDateUTC7();
     setSelectedMonth(new Date(today.getFullYear(), today.getMonth(), 1));
   };
 
@@ -523,10 +541,12 @@ export default function AvailabilityCalendar({
           <p className="text-sm text-gray-600">
             {firstMonth.toLocaleDateString('id-ID', { 
               year: 'numeric', 
-              month: 'long'
+              month: 'long',
+              timeZone: 'Asia/Jakarta'
             })} - {secondMonth.toLocaleDateString('id-ID', { 
               year: 'numeric', 
-              month: 'long'
+              month: 'long',
+              timeZone: 'Asia/Jakarta'
             })}
           </p>
         </CardHeader>
@@ -538,7 +558,8 @@ export default function AvailabilityCalendar({
               <h3 className="text-lg font-semibold mb-4 text-center">
                 {firstMonth.toLocaleDateString('id-ID', { 
                   year: 'numeric', 
-                  month: 'long'
+                  month: 'long',
+                  timeZone: 'Asia/Jakarta'
                 })}
               </h3>
               <div className="grid grid-cols-7 gap-2 text-sm">
@@ -554,7 +575,7 @@ export default function AvailabilityCalendar({
                   const dateStr = formatDate(date);
                   const isAvailable = isDateAvailable(dateStr);
                   const isUnavailable = isDateUnavailable(dateStr);
-                  const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
+                  const isPast = date < new Date(getCurrentDateUTC7().setHours(0, 0, 0, 0));
                   
                   return (
                     <button
@@ -608,7 +629,8 @@ export default function AvailabilityCalendar({
               <h3 className="text-lg font-semibold mb-4 text-center">
                 {secondMonth.toLocaleDateString('id-ID', { 
                   year: 'numeric', 
-                  month: 'long'
+                  month: 'long',
+                  timeZone: 'Asia/Jakarta'
                 })}
               </h3>
               <div className="grid grid-cols-7 gap-2 text-sm">
@@ -624,7 +646,7 @@ export default function AvailabilityCalendar({
                   const dateStr = formatDate(date);
                   const isAvailable = isDateAvailable(dateStr);
                   const isUnavailable = isDateUnavailable(dateStr);
-                  const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
+                  const isPast = date < new Date(getCurrentDateUTC7().setHours(0, 0, 0, 0));
                   
                   return (
                     <button
@@ -760,7 +782,7 @@ export default function AvailabilityCalendar({
                 <div key={index} className="flex items-center justify-between p-3 bg-red-50 rounded">
                   <div>
                     <div className="font-medium">
-                      {new Date(period.startDate).toLocaleDateString('id-ID')} - {new Date(period.endDate).toLocaleDateString('id-ID')}
+                      {new Date(period.startDate).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })} - {new Date(period.endDate).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })}
                     </div>
                     {period.reason && (
                       <div className="text-sm text-gray-600">{period.reason}</div>
@@ -811,25 +833,25 @@ export default function AvailabilityCalendar({
             
             // If it's already a Date object
             if (lastUpdated instanceof Date) {
-              return lastUpdated.toLocaleString('id-ID');
+              return lastUpdated.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
             }
             
             // If it's a Firestore timestamp object with _seconds
             if (typeof lastUpdated === 'object' && lastUpdated._seconds) {
               const date = new Date(lastUpdated._seconds * 1000);
-              return date.toLocaleString('id-ID');
+              return date.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
             }
             
             // If it's a string, try to parse it
             if (typeof lastUpdated === 'string') {
               const date = new Date(lastUpdated);
-              return isNaN(date.getTime()) ? 'Format tanggal tidak valid' : date.toLocaleString('id-ID');
+              return isNaN(date.getTime()) ? 'Format tanggal tidak valid' : date.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
             }
             
             // If it's a number (timestamp)
             if (typeof lastUpdated === 'number') {
               const date = new Date(lastUpdated);
-              return date.toLocaleString('id-ID');
+              return date.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
             }
             
             // Fallback

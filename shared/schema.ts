@@ -4,6 +4,71 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Firebase-compatible types (for when not using Drizzle)
+// Job interface for student translators to create job postings
+export interface Job {
+  id: string;
+  userId: string; // Reference to the user who created the job
+  title: string;
+  description: string;
+  budget: number;
+  deadline: string; // ISO date string
+  category: string;
+  skills: string[];
+  status: 'active' | 'in-progress' | 'completed' | 'cancelled';
+  difficulty?: 'easy' | 'medium' | 'hard';
+  // User data from verification (populated when creating job)
+  translatorName: string;
+  translatorCity: string;
+  translatorHskLevel?: string;
+  translatorExperience: string;
+  translatorServices: string[];
+  // Availability for this specific job
+  availability: {
+    isAvailable: boolean;
+    schedule: Array<{
+      date: string; // YYYY-MM-DD format
+      timeSlots: Array<{
+        startTime: string; // HH:mm format
+        endTime: string; // HH:mm format
+        isAvailable: boolean;
+      }>;
+    }>;
+    timezone?: string;
+  };
+  applicationsCount: number;
+  rating?: number;
+  isBookmarked?: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface InsertJob {
+  userId: string;
+  title: string;
+  description: string;
+  budget: number;
+  deadline: string;
+  category: string;
+  skills: string[];
+  translatorName: string;
+  translatorCity: string;
+  translatorHskLevel?: string;
+  translatorExperience: string;
+  translatorServices: string[];
+  availability: {
+    isAvailable: boolean;
+    schedule: Array<{
+      date: string;
+      timeSlots: Array<{
+        startTime: string;
+        endTime: string;
+        isAvailable: boolean;
+      }>;
+    }>;
+    timezone?: string;
+  };
+}
+
 export interface FirebaseServiceProvider {
   id: string;
   name: string;
@@ -166,6 +231,7 @@ export interface FirebaseUser {
   email?: string;
   profileImage?: string;
   role: 'user' | 'admin' | 'translator';
+  status: 'verified' | 'pending' | 'rejected'; // Represents the user's verification or recruitment status
 }
 
 export const users = pgTable("users", {
