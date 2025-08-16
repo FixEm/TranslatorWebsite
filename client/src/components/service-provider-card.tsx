@@ -1,12 +1,18 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Star, CheckCircle } from "lucide-react";
+import { MapPin, Star, CheckCircle, GraduationCap, Calendar } from "lucide-react";
 import { ServiceProvider } from "@shared/schema";
 import { Link } from "wouter";
 
 interface ServiceProviderCardProps {
-  provider: ServiceProvider;
+  provider: ServiceProvider & {
+    isStudent?: boolean;
+    university?: string;
+    expectedGraduation?: string;
+    hskLevel?: string;
+    availability?: any;
+  };
 }
 
 export default function ServiceProviderCard({ provider }: ServiceProviderCardProps) {
@@ -34,6 +40,17 @@ export default function ServiceProviderCard({ provider }: ServiceProviderCardPro
     return colors[service] || "bg-gray-100 text-gray-800";
   };
 
+  const getAvailableDaysCount = () => {
+    if (!provider.availability?.schedule) return 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return provider.availability.schedule.filter((day: any) => {
+      const dayDate = new Date(day.date);
+      return dayDate >= today && (day.timeSlots?.length > 0 || !day.timeSlots);
+    }).length;
+  };
+
   return (
     <Card className="card-gradient overflow-hidden shadow-elegant hover:shadow-luxury transition-all duration-300 border-0 rounded-2xl group">
       <div className="relative">
@@ -44,14 +61,23 @@ export default function ServiceProviderCard({ provider }: ServiceProviderCardPro
             className="w-full h-56 object-cover transition-transform duration-300 group-hover:scale-105"
           />
         </div>
-        {provider.isVerified && (
-          <div className="absolute top-4 right-4">
+        
+        {/* Verification and Student Badge */}
+        <div className="absolute top-4 right-4 flex flex-col gap-2">
+          {provider.isVerified && (
             <div className="glass-effect bg-green-500/90 text-white px-3 py-1 rounded-full flex items-center gap-1 text-xs font-semibold">
               <CheckCircle className="w-3 h-3" />
               Terverifikasi
             </div>
-          </div>
-        )}
+          )}
+          {provider.isStudent && (
+            <div className="glass-effect bg-blue-500/90 text-white px-3 py-1 rounded-full flex items-center gap-1 text-xs font-semibold">
+              <GraduationCap className="w-3 h-3" />
+              Student
+            </div>
+          )}
+        </div>
+        
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent rounded-t-2xl"></div>
       </div>
       
@@ -66,6 +92,28 @@ export default function ServiceProviderCard({ provider }: ServiceProviderCardPro
           <span className="text-slate-600 font-medium">{provider.city}, China</span>
         </div>
         
+        {/* Student-specific information */}
+        {provider.isStudent && (
+          <div className="mb-3 space-y-1">
+            {provider.university && (
+              <div className="flex items-center text-sm text-slate-600">
+                <GraduationCap className="w-3 h-3 mr-1" />
+                <span>{provider.university}</span>
+              </div>
+            )}
+            {provider.hskLevel && (
+              <div className="text-sm text-slate-600">
+                <span className="font-medium">HSK Level:</span> {provider.hskLevel}
+              </div>
+            )}
+            {provider.expectedGraduation && (
+              <div className="text-sm text-slate-600">
+                <span className="font-medium">Graduation:</span> {provider.expectedGraduation}
+              </div>
+            )}
+          </div>
+        )}
+        
         <div className="flex items-center justify-between mb-4">
           <div className="flex text-yellow-400">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -76,9 +124,19 @@ export default function ServiceProviderCard({ provider }: ServiceProviderCardPro
             ))}
           </div>
           <span className="text-sm text-slate-600 font-medium">
-            {provider.rating} ({provider.reviewCount} ulasan)
+            {provider.rating} {provider.isStudent ? '(New Student)' : `(${provider.reviewCount} ulasan)`}
           </span>
         </div>
+        
+        {/* Availability indicator for students */}
+        {provider.isStudent && provider.availability && (
+          <div className="mb-3 p-2 bg-blue-50 rounded-lg">
+            <div className="flex items-center gap-2 text-sm text-blue-700">
+              <Calendar className="w-3 h-3" />
+              <span>Available {getAvailableDaysCount()} days this month</span>
+            </div>
+          </div>
+        )}
         
         <p className="text-slate-700 mb-4 text-sm leading-relaxed line-clamp-3">
           {provider.description}
@@ -103,7 +161,7 @@ export default function ServiceProviderCard({ provider }: ServiceProviderCardPro
         
         <Link href={`/profile/${provider.id}`}>
           <Button className="w-full bg-premium hover:bg-premium text-white font-semibold py-3 rounded-xl shadow-elegant hover:shadow-luxury transition-all duration-300 transform group-hover:scale-105">
-            Lihat Profil Lengkap
+            {provider.isStudent ? 'Lihat Profil & Book Student' : 'Lihat Profil Lengkap'}
           </Button>
         </Link>
       </CardContent>

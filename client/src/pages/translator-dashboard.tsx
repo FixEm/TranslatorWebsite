@@ -8,6 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import VerificationStatus from "@/components/verification-status";
 import AvailabilityCalendar from "@/components/availability-calendar";
+import StudentBookingsManagement from "@/components/student-bookings-management";
+import { Job as JobFromSchema } from "@shared/schema"; // Import Job from schema
 import { 
   SidebarProvider, 
   Sidebar, 
@@ -32,7 +34,6 @@ import {
   CheckCircle, 
   DollarSign, 
   User, 
-  Settings, 
   LogOut, 
   FileText, 
   MessageSquare, 
@@ -40,7 +41,6 @@ import {
   Calendar,
   BarChart3,
   Wallet,
-  Heart,
   Eye,
   ChevronDown,
   Shield,
@@ -110,6 +110,8 @@ export default function TranslatorDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [applicationData, setApplicationData] = useState(null);
+  const [userJobs, setUserJobs] = useState<JobFromSchema[]>([]);
+  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
 
   // Handle URL query parameters for tab navigation - now reactive to search params
   useEffect(() => {
@@ -209,6 +211,13 @@ export default function TranslatorDashboard() {
             const data = await response.json();
             console.log('✅ Application data fetched:', data);
             setApplicationData(data);
+            
+            // Fetch user's jobs if verified
+            const verificationSteps = (data as any)?.verificationSteps || {};
+            const isVerified = verificationSteps.adminApproved && data.status === 'approved';
+            if (isVerified) {
+              fetchUserJobs(data.id || user.uid);
+            }
           } else {
             console.error('❌ Failed to fetch application data:', response.status, response.statusText);
             const errorText = await response.text();
@@ -222,6 +231,28 @@ export default function TranslatorDashboard() {
 
     fetchApplicationData();
   }, [user?.email]); // Only depend on user.email, not the entire user object
+
+  // Function to fetch user's created jobs
+  const fetchUserJobs = async (userId: string) => {
+    if (!userId) return;
+    
+    setIsLoadingJobs(true);
+    try {
+      console.log('🔍 Fetching jobs for userId:', userId);
+      const response = await fetch(`/api/jobs?userId=${userId}`);
+      if (response.ok) {
+        const jobs = await response.json();
+        console.log('✅ Jobs fetched:', jobs);
+        setUserJobs(jobs);
+      } else {
+        console.error('❌ Failed to fetch jobs:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching jobs:', error);
+    } finally {
+      setIsLoadingJobs(false);
+    }
+  };
 
   // Function to handle tab changes with URL updates
   const handleTabChange = (tabKey: string) => {
@@ -253,6 +284,12 @@ export default function TranslatorDashboard() {
       isActive: activeTab === 'availability'
     },
     {
+      title: "Kelola Booking",
+      icon: Briefcase,
+      key: "bookings",
+      isActive: activeTab === 'bookings'
+    },
+    {
       title: "Workspace",
       icon: Briefcase,
       key: "workspace",
@@ -281,30 +318,6 @@ export default function TranslatorDashboard() {
       icon: Wallet,
       key: "wallet",
       isActive: activeTab === 'wallet'
-    },
-    {
-      title: "Profil",
-      icon: User,
-      key: "profile",
-      isActive: activeTab === 'profile'
-    }
-  ];
-
-  const profileItems = [
-    {
-      title: "List Favorit",
-      icon: Heart,
-      key: "favorites"
-    },
-    {
-      title: "Edit Profil",
-      icon: User,
-      key: "edit-profile"
-    },
-    {
-      title: "Ubah Password",
-      icon: Settings,
-      key: "change-password"
     }
   ];
 
@@ -408,211 +421,158 @@ export default function TranslatorDashboard() {
     }).format(amount);
   };
 
-  const renderWorkspace = () => (
-    <div className="space-y-6">
-      {/* Search and Filter Bar */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <Input
-            placeholder="Cari student translator Indonesia terbaik..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Filter className="h-4 w-4 mr-2" />
-            Semua Status
-          </Button>
-          <Button variant="outline" size="sm">
-            Semua Tanggal
-          </Button>
-          <Button variant="outline" size="sm">
-            Semua Jenis Pekerjaan
-          </Button>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="text-center py-8">
-        <div className="max-w-2xl mx-auto">
-          <div className="mb-6">
-            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Search className="h-8 w-8 text-gray-400" />
-            </div>
-            <h2 className="text-2xl font-bold text-navy-800 mb-2">
-              Cari student translator Indonesia Terbaik, Dengan Sekali Klik
-            </h2>
-            <p className="text-gray-600">
-              Temukan student translator dari berbagai kota di China.
-            </p>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button className="hover:bg-premium text-white px-6">
-              Cari Klien
-            </Button>
+  const renderWorkspace = () => {
+    const isVerified = getVerificationStatus() === 'verified';
+    
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-navy-800">Available Jobs</h2>
+            <p className="text-gray-600">Browse and apply to translation job opportunities</p>
           </div>
         </div>
-      </div>
 
-      {/* Available Jobs */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-navy-800">Pekerjaan Tersedia</h3>
-        {jobs.map((job) => (
-          <Card key={job.id} className="hover:shadow-lg transition-shadow">
+        {/* Status message for unverified users */}
+        {!isVerified && (
+          <Card className="border-orange-200 bg-orange-50">
             <CardContent className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h4 className="text-lg font-semibold text-navy-800">{job.title}</h4>
-                    {job.isBookmarked && <Heart className="h-4 w-4 text-red-500 fill-current" />}
-                  </div>
-                  <p className="text-sm text-gray-600 mb-2">oleh {job.client}</p>
-                  <p className="text-gray-700 mb-3">{job.description}</p>
-                  
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {job.skills.map((skill, index) => (
-                      <Badge key={index} variant="secondary" className="text-xs">
-                        {skill}
-                      </Badge>
-                    ))}
-                  </div>
+              <div className="text-center">
+                <Shield className="h-12 w-12 text-orange-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-orange-800 mb-2">Verification Required</h3>
+                <p className="text-orange-700 mb-4">
+                  Complete your verification process to start creating job postings and attract clients.
+                </p>
+                <Button onClick={() => handleTabChange('verification')} variant="outline">
+                  Go to Verification
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-                  <div className="flex items-center gap-4 text-sm text-gray-600">
-                    <div className="flex items-center gap-1">
-                      <DollarSign className="h-4 w-4" />
-                      <span className="font-semibold">{formatCurrency(job.budget)}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4" />
-                      <span>Deadline: {new Date(job.deadline).toLocaleDateString('id-ID')}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Eye className="h-4 w-4" />
-                      <span>{job.applications} aplikasi</span>
-                    </div>
-                    {job.rating && (
-                      <div className="flex items-center gap-1">
-                        <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                        <span>{job.rating}</span>
+        {/* User's Jobs */}
+        {isVerified && (
+          <div className="space-y-4">
+            {isLoadingJobs ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-navy-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading your jobs...</p>
+              </div>
+            ) : userJobs.length > 0 ? (
+              <>
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-semibold text-navy-800">Your Job Postings ({userJobs.length})</h3>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm">
+                      <Filter className="h-4 w-4 mr-2" />
+                      Filter by Status
+                    </Button>
+                  </div>
+                </div>
+
+                {userJobs.map((job) => (
+                  <Card key={job.id} className="hover:shadow-lg transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="text-lg font-semibold text-navy-800">{job.title}</h4>
+                            <Badge variant={
+                              job.status === 'active' ? 'default' : 
+                              job.status === 'in-progress' ? 'secondary' : 
+                              'outline'
+                            }>
+                              {job.status}
+                            </Badge>
+                          </div>
+                          <p className="text-gray-700 mb-3">{job.description}</p>
+                          
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {job.skills?.map((skill: string, index: number) => (
+                              <Badge key={index} variant="secondary" className="text-xs">
+                                {skill}
+                              </Badge>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                            <div className="flex items-center gap-1">
+                              <DollarSign className="h-4 w-4" />
+                              <span className="font-semibold">{formatCurrency(job.budget)}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-4 w-4" />
+                              <span>Deadline: {new Date(job.deadline).toLocaleDateString('id-ID')}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <User className="h-4 w-4" />
+                              <span>{job.applicationsCount || 0} applications</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col gap-2 ml-4">
+                          <Button variant="outline" size="sm">
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </Button>
+                          <Button variant="outline" size="sm">
+                            Edit
+                          </Button>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
 
-                <div className="flex flex-col items-end gap-2 ml-4">
-                  <Badge className={getStatusColor(job.status)}>
-                    {job.status === 'active' && 'Aktif'}
-                    {job.status === 'in-progress' && 'Berlangsung'}
-                    {job.status === 'completed' && 'Selesai'}
-                  </Badge>
-                  <Badge variant="outline" className={getDifficultyColor(job.difficulty)}>
-                    {job.difficulty === 'easy' && 'Mudah'}
-                    {job.difficulty === 'medium' && 'Sedang'}
-                    {job.difficulty === 'hard' && 'Sulit'}
-                  </Badge>
-                  <Button size="sm" className="mt-2">
-                    {job.status === 'active' ? 'Lamar' : 'Lihat Detail'}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderProfile = () => (
-    <div className="space-y-6">
-      {/* Profile Header */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex flex-col md:flex-row gap-6">
-            <div className="flex flex-col items-center md:items-start">
-              <Avatar className="h-24 w-24 mb-4">
-                <AvatarImage src={profile.avatar} />
-                <AvatarFallback className="text-2xl">{profile.name.charAt(0)}</AvatarFallback>
-              </Avatar>
-              <Badge variant="secondary" className="mb-2">
-                {getVerificationStatus() === 'verified' && 'Terverifikasi'}
-                {getVerificationStatus() === 'pending' && 'Menunggu Verifikasi'}
-                {getVerificationStatus() === 'unverified' && 'Belum Terverifikasi'}
-                {getVerificationStatus() === 'rejected' && 'Ditolak'}
-              </Badge>
-            </div>
-            
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold text-navy-800 mb-2">{profile.name}</h2>
-              <p className="text-gray-600 mb-4">{profile.email}</p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                <div className="text-center md:text-left">
-                  <div className="text-2xl font-bold text-navy-800">{profile.rating}</div>
-                  <div className="text-sm text-gray-600">Rating</div>
-                  <div className="flex items-center justify-center md:justify-start gap-1 mt-1">
-                    {[1,2,3,4,5].map((star) => (
-                      <Star key={star} className="h-4 w-4 text-yellow-500 fill-current" />
-                    ))}
-                  </div>
-                </div>
-                <div className="text-center md:text-left">
-                  <div className="text-2xl font-bold text-navy-800">{profile.completedJobs}</div>
-                  <div className="text-sm text-gray-600">Proyek Selesai</div>
-                </div>
-                <div className="text-center md:text-left">
-                  <div className="text-2xl font-bold text-navy-800">{formatCurrency(profile.balance)}</div>
-                  <div className="text-sm text-gray-600">Total Penghasilan</div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 mb-4">
-                {profile.specializations.map((spec, index) => (
-                  <Badge key={index} variant="outline">
-                    {spec}
-                  </Badge>
+                      {/* Job availability preview */}
+                      {job.availability?.schedule && job.availability.schedule.length > 0 && (
+                        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                          <h5 className="text-sm font-medium text-gray-700 mb-2">Available Times:</h5>
+                          <div className="flex flex-wrap gap-2">
+                            {job.availability.schedule.slice(0, 3).map((day: any, index: number) => (
+                              <div key={index} className="text-xs bg-white px-2 py-1 rounded border">
+                                {new Date(day.date).toLocaleDateString('id-ID', { 
+                                  weekday: 'short', 
+                                  month: 'short', 
+                                  day: 'numeric' 
+                                })}
+                                {day.timeSlots?.length > 0 && (
+                                  <span className="ml-1 text-gray-500">
+                                      ({day.timeSlots?.length} slots)
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                            {job.availability.schedule.length > 3 && (
+                              <div className="text-xs text-gray-500 px-2 py-1">
+                                +{job.availability.schedule.length - 3} more days
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 ))}
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Briefcase className="h-8 w-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-600 mb-2">No Jobs Available</h3>
+                <p className="text-gray-500 mb-4">
+                  Check back later for new translation job opportunities posted by admin.
+                </p>
               </div>
-
-              <div className="flex gap-3">
-                <Button>
-                  <User className="h-4 w-4 mr-2" />
-                  Edit Profil
-                </Button>
-                <Button variant="outline">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Pengaturan
-                </Button>
-              </div>
-            </div>
+            )}
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Profile Options */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {profileItems.map((item) => (
-          <Card key={item.key} className="hover:shadow-lg transition-shadow cursor-pointer">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <item.icon className="h-6 w-6 text-gray-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-navy-800 mb-2">{item.title}</h3>
-              <p className="text-gray-600 text-sm">
-                {item.key === 'favorites' && 'Kelola daftar jasa favorit Anda'}
-                {item.key === 'edit-profile' && 'Perbarui informasi profil Anda'}
-                {item.key === 'change-password' && 'Ubah kata sandi akun Anda'}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
+        )}
       </div>
-    </div>
-  );
+    );
+  };
+
+
 
   const renderContent = () => {
     switch (activeTab) {
@@ -717,10 +677,30 @@ export default function TranslatorDashboard() {
             )}
           </div>
         );
+      case 'bookings':
+        return (
+          <div>
+            {applicationData && getVerificationStatus() === 'verified' ? (
+              <StudentBookingsManagement 
+                userId={(applicationData as any).id || user?.uid}
+                providerName={profile.name}
+              />
+            ) : (
+              <div className="text-center py-12">
+                <Shield className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-600 mb-2">Verifikasi Diperlukan</h3>
+                <p className="text-gray-500 mb-4">
+                  Selesaikan proses verifikasi untuk mulai menerima dan mengelola booking.
+                </p>
+                <Button onClick={() => handleTabChange('verification')} variant="outline">
+                  Ke Verifikasi
+                </Button>
+              </div>
+            )}
+          </div>
+        );
       case 'workspace':
         return renderWorkspace();
-      case 'profile':
-        return renderProfile();
       case 'chat':
         return (
           <div className="text-center py-12">
@@ -963,23 +943,7 @@ export default function TranslatorDashboard() {
               </SidebarGroupContent>
             </SidebarGroup>
 
-            <Separator className="mx-4" />
 
-            <SidebarGroup>
-              <SidebarGroupLabel>Profil Saya</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {profileItems.map((item) => (
-                    <SidebarMenuItem key={item.key}>
-                      <SidebarMenuButton>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
           </SidebarContent>
 
           <SidebarFooter className="p-4">
@@ -998,6 +962,15 @@ export default function TranslatorDashboard() {
                 </Badge>
               </div>
             </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setLocation('/edit-profile')}
+              className="w-full mb-2"
+            >
+              <User className="h-4 w-4 mr-2" />
+              Edit Profile
+            </Button>
             <Button 
               variant="outline" 
               size="sm" 

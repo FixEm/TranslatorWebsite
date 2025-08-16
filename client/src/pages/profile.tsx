@@ -2,18 +2,69 @@ import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
+import BookableCalendar from "@/components/bookable-calendar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { MapPin, Star, CheckCircle, MessageSquare, ArrowLeft } from "lucide-react";
+import { MapPin, Star, CheckCircle, MessageSquare, ArrowLeft, Calendar } from "lucide-react";
 import { ServiceProvider } from "@shared/schema";
 
 export default function ProfilePage() {
   const { id } = useParams();
 
-  const { data: provider, isLoading, error } = useQuery<ServiceProvider>({
+  const { data: provider, isLoading, error } = useQuery<ServiceProvider & {
+    isStudent?: boolean;
+    university?: string;
+    expectedGraduation?: string;
+    hskLevel?: string;
+    availability?: any;
+    description?: string;
+  }>({
     queryKey: [`/api/service-providers/${id}`],
     enabled: !!id,
+    queryFn: async () => {
+      // Try to fetch from service providers first
+      try {
+        const response = await fetch(`/api/service-providers/${id}`);
+        if (response.ok) {
+          return response.json();
+        }
+      } catch (error) {
+        console.log('Not found in service providers, trying student applications...');
+      }
+      
+      // If not found in service providers, try student applications
+      const studentResponse = await fetch(`/api/applications/verified`);
+      if (!studentResponse.ok) throw new Error('Failed to fetch student data');
+      
+      const students = await studentResponse.json();
+      const student = students.find((s: any) => s.id === id);
+      
+      if (!student) throw new Error('Provider not found');
+      
+      // Transform student to provider format
+      return {
+        id: student.id,
+        name: student.name,
+        email: student.email,
+        whatsapp: student.whatsapp,
+        city: student.city,
+        services: student.services || [],
+        experience: student.experience || "0",
+        pricePerDay: student.pricePerDay || "500000",
+        rating: "4.5",
+        reviewCount: "New",
+        description: student.motivation || "Motivated student translator ready to help with your translation needs.",
+        profileImage: student.profileImage || "",
+        isVerified: true,
+        languages: student.languages || [],
+        availability: student.availability || null,
+        isStudent: true,
+        university: student.university,
+        expectedGraduation: student.expectedGraduation,
+        hskLevel: student.hskLevel
+      };
+    }
   });
 
   const getServiceLabel = (service: string) => {
@@ -127,7 +178,7 @@ export default function ProfilePage() {
                     ))}
                   </div>
                   <span className="text-sm text-silver-600">
-                    {provider.rating} ({provider.reviewCount} ulasan)
+                    {provider.rating} {provider.isStudent ? '(New Student)' : `(${provider.reviewCount} ulasan)`}
                   </span>
                 </div>
                 <div className="space-y-2">
@@ -137,7 +188,8 @@ export default function ProfilePage() {
                       Terverifikasi
                     </Badge>
                   )}
-                  <div className="text-2xl font-bold text-navy-600">¥{provider.pricePerDay}/hari</div>
+                  
+                  <div className="text-2xl font-bold text-navy-600">Rp {provider.pricePerDay}/hari</div>
                 </div>
               </CardContent>
             </Card>
@@ -146,17 +198,69 @@ export default function ProfilePage() {
           {/* Detailed Information */}
           <div className="lg:col-span-2">
             <div className="space-y-6">
-              {/* Services */}
+              {/* Student-specific information */}
+              {provider.isStudent && (
+                <Card>
+                  <CardContent className="p-6">
+                    <h2 className="text-lg font-semibold text-navy-800 mb-3">Academic Information</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {provider.university && (
+                        <div>
+                          <div className="text-sm text-gray-600">University</div>
+                          <div className="font-medium">{provider.university}</div>
+                        </div>
+                      )}
+                      {provider.expectedGraduation && (
+                        <div>
+                          <div className="text-sm text-gray-600">Expected Graduation</div>
+                          <div className="font-medium">{provider.expectedGraduation}</div>
+                        </div>
+                      )}
+                      {provider.hskLevel && (
+                        <div>
+                          <div className="text-sm text-gray-600">HSK Level</div>
+                          <div className="font-medium">{provider.hskLevel}</div>
+                        </div>
+                      )}
+                      <div>
+                        <div className="text-sm text-gray-600">Experience</div>
+                        <div className="font-medium">{provider.experience} years</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Description */}
               <Card>
                 <CardContent className="p-6">
-                  <h2 className="text-lg font-semibold text-navy-800 mb-3">Layanan yang Ditawarkan</h2>
-                  <div className="flex flex-wrap gap-2">
-                    {Array.isArray(provider.services) ? (provider.services as string[]).map((service: string) => (
-                      <Badge key={service} variant="secondary" className="bg-navy-100 text-navy-800">
-                        {getServiceLabel(service)}
-                      </Badge>
-                    )) : []}
-                  </div>
+                  <h2 className="text-lg font-semibold text-navy-800 mb-3">Diskripsi Student</h2>
+                  <p className="text-gray-700 leading-relaxed">
+                    {typeof provider.description === 'string' ? provider.description : "No description available"}
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Availability Calendar */}
+              <Card>
+                <CardContent className="p-6">
+                  <h2 className="text-lg font-semibold text-navy-800 mb-3 flex items-center gap-2">
+                    <Calendar className="h-5 w-5" />
+                    {provider.isStudent ? "Student's Availability" : "Availability"}
+                  </h2>
+                  {provider.availability ? (
+                    <BookableCalendar
+                      userId={provider.id}
+                      providerName={provider.name}
+                      initialAvailability={provider.availability}
+                      pricePerDay={provider.pricePerDay}
+                    />
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                      <p>No availability information set</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -180,33 +284,6 @@ export default function ProfilePage() {
                 </Card>
               )}
 
-              {/* Experience */}
-              <Card>
-                <CardContent className="p-6">
-                  <h2 className="text-lg font-semibold text-navy-800 mb-3">Pengalaman & Keahlian</h2>
-                  <p className="text-gray-700 leading-relaxed">
-                    {provider.description}
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Pricing Details */}
-              <Card>
-                <CardContent className="p-6">
-                  <h2 className="text-lg font-semibold text-navy-800 mb-3">Detail Harga</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-sm text-gray-600">Tarif Dasar (per hari)</div>
-                      <div className="text-lg font-semibold text-navy-600">¥{provider.pricePerDay}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-600">Pengalaman</div>
-                      <div className="text-lg font-semibold text-navy-600">{provider.experience} tahun</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
               {/* Contact Buttons */}
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button 
@@ -223,7 +300,7 @@ export default function ProfilePage() {
                   size="lg"
                 >
                   <MessageSquare className="w-4 h-4 mr-2" />
-                  Kirim Pesan
+                  {provider.isStudent ? 'Book Student' : 'Kirim Pesan'}
                 </Button>
               </div>
             </div>

@@ -14,6 +14,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import StudentShowcaseForm from "@/components/student-showcase-form";
+import BookingsManagement from "@/components/bookings-management";
+import ConfirmedJobsManagement from "@/components/confirmed-jobs-management";
 import { 
   BarChart3, 
   Users, 
@@ -34,7 +37,8 @@ import {
   XCircle,
   AlertCircle,
   Calendar,
-  Video
+  Video,
+  Briefcase
 } from "lucide-react";
 import { Application } from "@shared/schema";
 
@@ -43,6 +47,7 @@ const SIDEBAR_ITEMS = [
   { key: "recruitment", label: "Recruitment", icon: Handshake },
   { key: "verified-users", label: "Verified Users", icon: UserCheck },
   { key: "student-pool", label: "Student Pool", icon: Users },
+  { key: "job-management", label: "Student Showcase", icon: Briefcase },
 ];
 
 export default function AdminPage() {
@@ -107,6 +112,12 @@ export default function AdminPage() {
 	// Filter applications by status
 	const pendingApplications = allApplications?.filter(app => app.status === 'pending') || [];
 	const approvedApplications = allApplications?.filter(app => app.status === 'approved') || [];
+	
+	// Filter for verified applications (approved + admin approved)
+	const verifiedApplications = allApplications?.filter(app => {
+		const verificationSteps = (app as any).verificationSteps || {};
+		return app.status === 'approved' && verificationSteps.adminApproved === true;
+	}) || [];
 
 	// Update application status mutation
 	const updateStatusMutation = useMutation({
@@ -2137,6 +2148,59 @@ export default function AdminPage() {
                 </Card>
               </div>
             )}
+          </>
+        )}
+
+        {activeTab === "job-management" && (
+          <>
+            <h1 className="text-3xl font-bold text-navy-800 mb-2">Job Management</h1>
+            <p className="text-silver-600 mb-8">Create and manage translation job postings</p>
+            
+            <Tabs defaultValue="create-job" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="create-job">Create New Job</TabsTrigger>
+                <TabsTrigger value="manage-jobs">Manage Jobs</TabsTrigger>
+                <TabsTrigger value="bookings">All Bookings</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="create-job" className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Create Student Showcase</CardTitle>
+                    <p className="text-gray-600">Create a client-facing showcase for verified student translators</p>
+                  </CardHeader>
+                  <CardContent>
+                    <StudentShowcaseForm 
+                      verifiedTranslators={verifiedApplications} // Pass list of verified translators
+                      onJobCreated={(job: any) => {
+                        toast({
+                          title: "Student Showcase Created!",
+                          description: `Job "${job.title}" has been created and is now visible in the marketplace.`,
+                        });
+                        // Refresh any job list if needed
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              
+              <TabsContent value="manage-jobs" className="space-y-6">
+                <ConfirmedJobsManagement />
+              </TabsContent>
+              
+              <TabsContent value="bookings" className="space-y-6">
+                <BookingsManagement />
+              </TabsContent>
+            </Tabs>
+          </>
+        )}
+
+        {activeTab === "bookings" && (
+          <>
+            <h1 className="text-3xl font-bold text-navy-800 mb-2">Bookings Management</h1>
+            <p className="text-silver-600 mb-8">Manage all student translator bookings</p>
+            
+            <BookingsManagement />
           </>
         )}
 

@@ -119,7 +119,7 @@ export default function Header() {
                     </DropdownMenuItem>
                     
                     <DropdownMenuItem asChild>
-                      <Link href="/translator/dashboard?tab=profile" className="flex items-center space-x-2">
+                      <Link href="/edit-profile" className="flex items-center space-x-2">
                         <User className="h-4 w-4" />
                         <span>Profile</span>
                       </Link>
