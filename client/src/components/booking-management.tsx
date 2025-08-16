@@ -252,7 +252,7 @@ export default function BookingManagement() {
               <DollarSign className="h-8 w-8 text-green-600" />
               <div className="ml-3">
                 <p className="text-sm text-gray-600">Total Revenue</p>
-                <p className="text-2xl font-bold text-navy-800">¥{bookingStats.totalRevenue.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-navy-800">Rp {bookingStats.totalRevenue.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -362,7 +362,7 @@ export default function BookingManagement() {
                           <div>Service: {booking.serviceType.replace('_', ' ').toUpperCase()}</div>
                           <div>Duration: {booking.totalHours} hours</div>
                           <div className="font-semibold text-navy-600">
-                            Total: ¥{booking.totalAmount?.toLocaleString() || 0}
+                            Total: Rp {booking.totalAmount?.toLocaleString() || 0}
                           </div>
                         </div>
                       </div>
@@ -509,7 +509,7 @@ export default function BookingManagement() {
                   <div>Date: {format(parseISO(selectedBooking.bookingDate), 'MMM d, yyyy')}</div>
                   <div>Time: {selectedBooking.startTime} - {selectedBooking.endTime}</div>
                   <div>Service: {selectedBooking.serviceType}</div>
-                  <div>Total: ¥{selectedBooking.totalAmount?.toLocaleString()}</div>
+                  <div>Total: Rp {selectedBooking.totalAmount?.toLocaleString()}</div>
                 </div>
               </div>
             </div>

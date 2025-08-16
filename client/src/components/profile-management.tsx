@@ -5,10 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import FileUpload from "@/components/file-upload";
 import { useToast } from "@/hooks/use-toast";
-import { User, MapPin, GraduationCap, Star, Languages, Briefcase, Camera } from "lucide-react";
+import { User, MapPin, GraduationCap, Star, Languages, Briefcase } from "lucide-react";
 
 interface ProfileManagementProps {
   applicationData?: any;
@@ -27,10 +25,6 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
     whatsapp: '',
   });
 
-  // Profile image state
-  const [profileImageFiles, setProfileImageFiles] = useState<File[]>([]);
-  const [currentProfileImage, setCurrentProfileImage] = useState<string>('');
-
   // Initialize form data when applicationData changes
   useEffect(() => {
     if (applicationData) {
@@ -39,7 +33,6 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
         pricePerDay: applicationData.pricePerDay || '',
         whatsapp: applicationData.whatsapp || '',
       });
-      setCurrentProfileImage(applicationData.profileImage || '');
     }
   }, [applicationData]);
 
@@ -48,10 +41,6 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
       ...prev,
       [field]: value
     }));
-  };
-
-  const handleProfileImageChange = (files: File[]) => {
-    setProfileImageFiles(files);
   };
 
   const handleSave = async () => {
@@ -67,32 +56,17 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
 
       setIsLoading(true);
 
-      // Create FormData for file upload
-      const formData = new FormData();
-      formData.append('description', profileData.description);
-      formData.append('pricePerDay', profileData.pricePerDay);
-      formData.append('whatsapp', profileData.whatsapp);
-      
-      // Add profile image if selected
-      if (profileImageFiles[0]) {
-        formData.append('profileImage', profileImageFiles[0]);
-      }
-
-      const response = await fetch(`/api/applications/${applicationData.id}/upload`, {
+      const response = await fetch(`/api/applications/${applicationData.id}`, {
         method: 'PATCH',
-        body: formData, // Send as FormData instead of JSON
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(profileData),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to update profile');
-      }
-
-      const result = await response.json();
-      
-      // Update current profile image if upload was successful
-      if (result.profileImage) {
-        setCurrentProfileImage(result.profileImage);
       }
 
       toast({
@@ -101,7 +75,6 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
       });
 
       setIsEditing(false);
-      setProfileImageFiles([]); // Clear selected files
       onUpdate?.();
 
     } catch (error: any) {
@@ -125,17 +98,16 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
         whatsapp: applicationData.whatsapp || '',
       });
     }
-    setProfileImageFiles([]); // Clear selected files
     setIsEditing(false);
   };
 
   const getIntentLabel = (intent: string) => {
-    const labels: { [key: string]: string } = {
-      translator: "Penerjemah",
-      tour_guide: "Tour Guide",
-      both: "Keduanya"
-    };
-    return labels[intent] || intent;
+    switch (intent) {
+      case 'translator': return 'Translator';
+      case 'tour_guide': return 'Tour Guide';
+      case 'both': return 'Translator & Tour Guide';
+      default: return 'Not specified';
+    }
   };
 
   const getServices = () => {
@@ -154,60 +126,17 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
 
   return (
     <div className="space-y-6">
-      {/* Profile Image Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Camera className="h-5 w-5" />
-            Profile Picture
-          </CardTitle>
-          <CardDescription>
-            Upload a professional photo to make a great first impression with clients
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Current Profile Image Display */}
-          <div className="flex items-center gap-4">
-            <Avatar className="h-20 w-20">
-              <AvatarImage 
-                src={currentProfileImage || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=300"} 
-                alt="Profile"
-              />
-              <AvatarFallback className="text-lg">
-                {applicationData?.name?.charAt(0) || 'U'}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <p className="text-sm text-gray-600 mb-2">
-                {currentProfileImage ? 'Current profile picture' : 'No profile picture set'}
-              </p>
-              {isEditing && (
-                <FileUpload
-                  label="Upload New Profile Picture"
-                  accept="image/*"
-                  multiple={false}
-                  maxFiles={1}
-                  maxSize={5}
-                  onFilesChange={handleProfileImageChange}
-                  files={profileImageFiles}
-                />
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Basic Profile Information */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex justify-between items-start">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <User className="h-5 w-5" />
-                Basic Information
+                Profile Information
               </CardTitle>
               <CardDescription>
-                Your personal and professional details
+                Manage your personal and professional information
               </CardDescription>
             </div>
             {!isEditing && (
@@ -285,6 +214,7 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
               )}
             </div>
               
+
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
               <p className="text-sm text-gray-600">

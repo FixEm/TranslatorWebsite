@@ -31,10 +31,7 @@ export default function Header() {
         <div className="flex justify-between items-center h-20">
           <div className="flex items-center">
             <Link href="/" className="flex-shrink-0 flex items-center group">
-              <div className="p-2 bg-premium rounded-xl shadow-md group-hover:shadow-lg transition-all duration-300">
-                <Languages className="text-white h-6 w-6" />
-              </div>
-              <span className="text-xl font-bold text-slate-800 ml-4 tracking-tight">PenerjemahChina</span>
+              <span className="text-3xl font-black text-red-700 ml-4 tracking-wide font-sans rounded-sm">AyoCabut</span>
             </Link>
           </div>
           
@@ -42,7 +39,7 @@ export default function Header() {
             <Link 
               href="/" 
               className={`font-semibold transition-all duration-200 hover:scale-105 ${
-                isActive("/") ? "text-blue-600" : "text-slate-700 hover:text-blue-600"
+                isActive("/") ? "text-red-600" : "text-slate-700 hover:text-red-600"
               }`}
             >
               Beranda
@@ -50,20 +47,20 @@ export default function Header() {
             <Link 
               href="/search" 
               className={`font-semibold transition-all duration-200 hover:scale-105 ${
-                isActive("/search") ? "text-blue-600" : "text-slate-700 hover:text-blue-600"
+                isActive("/search") ? "text-red-600" : "text-slate-700 hover:text-red-600"
               }`}
             >
               Cari Penerjemah
             </Link>
             <a 
               href="#cara-kerja" 
-              className="text-slate-700 hover:text-blue-600 font-semibold transition-all duration-200 hover:scale-105"
+              className="text-slate-700 hover:text-red-600 font-semibold transition-all duration-200 hover:scale-105"
             >
               Cara Kerja
             </a>
             <a 
               href="#tentang" 
-              className="text-slate-700 hover:text-blue-600 font-semibold transition-all duration-200 hover:scale-105"
+              className="text-slate-700 hover:text-red-600 font-semibold transition-all duration-200 hover:scale-105"
             >
               Tentang
             </a>
@@ -75,14 +72,14 @@ export default function Header() {
               <div className="flex items-center space-x-6">
                 <Link href="/translator/dashboard">
                   <span className={`font-semibold transition-all duration-200 hover:scale-105 ${
-                    isActive("/translator/dashboard") ? "text-blue-600" : "text-slate-700 hover:text-blue-600"
+                    isActive("/translator/dashboard") ? "text-red-600" : "text-slate-700 hover:text-red-600"
                   }`}>
                     Dashboard
                   </span>
                 </Link>
                 <Link href="/chat">
                   <span className={`font-semibold transition-all duration-200 hover:scale-105 flex items-center space-x-1 ${
-                    isActive("/chat") ? "text-blue-600" : "text-slate-700 hover:text-blue-600"
+                    isActive("/chat") ? "text-red-600" : "text-slate-700 hover:text-red-600"
                   }`}>
                     <MessageSquare className="h-5 w-5" />
                
@@ -91,7 +88,7 @@ export default function Header() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className={`font-semibold transition-all duration-200 hover:scale-105 flex items-center space-x-1 ${
-                      isActive("/profile") ? "text-blue-600" : "text-slate-700 hover:text-blue-600"
+                      isActive("/profile") ? "text-red-600" : "text-slate-700 hover:text-red-600"
                     }`}>
                       <User className="h-5 w-5" />
                       <ChevronDown className="h-4 w-4" />
@@ -140,12 +137,12 @@ export default function Header() {
               // Guest user buttons
               <>
                 <Link href="/login">
-                  <Button variant="ghost" className="text-blue-600 hover:text-slate-800 font-semibold">
+                  <Button variant="ghost" className="text-red-700 hover:text-red-700 hover:bg-red-50 font-semibold">
                     Masuk
                   </Button>
                 </Link>
                 <Link href="/translator/signup">
-                  <Button className="bg-premium text-white px-6 py-3 rounded-xl hover:bg-premium shadow-elegant hover:shadow-luxury transition-all duration-300 font-semibold tracking-wide hover:scale-105 transform">
+                  <Button className="bg-premium text-white px-6 py-3 rounded-xl hover:bg-premium bg-red-700 hover:bg-red-800 shadow-elegant hover:shadow-luxury transition-all duration-300 font-semibold tracking-wide hover:scale-105 transform">
                     Daftar Sebagai Penerjemah
                   </Button>
                 </Link>

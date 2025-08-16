@@ -49,10 +49,11 @@ export function isStudentEmail(email: string): boolean {
 // Helper function to calculate profile completeness
 export function calculateCompletenessScore(verificationSteps: any): number {
   const steps = {
-    emailVerified: 30,
-    studentIdUploaded: 25,
-    hskUploaded: 20,
-    introVideoUploaded: 25,
+    emailVerified: 25,
+    studentIdUploaded: 20,
+    hskUploaded: 25,
+    cvUploaded: 20,
+    introVideoUploaded: 10,
     adminApproved: 0  // Admin approval doesn't add points, but is required for activation
   };
   

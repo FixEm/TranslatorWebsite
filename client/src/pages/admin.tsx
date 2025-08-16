@@ -392,11 +392,11 @@ export default function AdminPage() {
         const steps = verificationSteps || {};
         
         const points = {
-          emailVerified: 30,
-          studentIdUploaded: 25,
-          hskUploaded: 20,
-          cvUploaded: 15,
-          availabilitySet: 10,
+          emailVerified: 25,
+          studentIdUploaded: 20,
+          hskUploaded: 25,
+          cvUploaded: 20,
+          introVideoUploaded: 10,
         };
         
         let score = 0;
@@ -404,7 +404,7 @@ export default function AdminPage() {
         if (steps.studentIdUploaded || (app as any).studentIdDocument) score += points.studentIdUploaded;
         if (steps.hskUploaded || (app as any).hskCertificate) score += points.hskUploaded;
         if (steps.cvUploaded || (app as any).cvDocument) score += points.cvUploaded;
-        if ((app as any).availability) score += points.availabilitySet;
+        if ((app as any).introVideo) score += points.introVideoUploaded;
         
         // Account is only "complete" (100%) when admin approves
         if (steps.adminApproved && app.status === 'approved') {
@@ -739,6 +739,24 @@ export default function AdminPage() {
       setSelectedStudent(studentData);
       setActiveTab("student-pool");
     }
+  };
+
+  // Helper function to get current date in UTC+7 (same as other calendar components)
+  const getCurrentDateUTC7 = () => {
+    const now = new Date();
+    // If we're already in UTC+7 timezone, just return the current date
+    // If we need to convert from a different timezone, we should use proper timezone conversion
+    // For now, let's use the local date to avoid the offset issue
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  };
+
+  // Helper function to format date to YYYY-MM-DD in UTC+7
+  const formatDateUTC7 = (date: Date) => {
+    // Use local date formatting to avoid timezone offset issues
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
 	return (
@@ -1635,7 +1653,7 @@ export default function AdminPage() {
                                       }
 
                                       // Generate calendar for current month and next month
-                                      const today = new Date();
+                                      const today = getCurrentDateUTC7();
                                       const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
                                       const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
                                       
@@ -1657,7 +1675,7 @@ export default function AdminPage() {
                                             date,
                                             isCurrentMonth: date.getMonth() === month,
                                             isToday: date.toDateString() === today.toDateString(),
-                                            isAvailable: availableDates.includes(date.toISOString().split('T')[0])
+                                            isAvailable: availableDates.includes(formatDateUTC7(date))
                                           });
                                         }
                                         

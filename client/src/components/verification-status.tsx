@@ -17,7 +17,6 @@ import {
   Upload, 
   FileText, 
   Star,
-  Calendar,
   Video,
   ExternalLink
 } from "lucide-react";
@@ -28,7 +27,6 @@ interface VerificationStep {
   hskUploaded: boolean;
   cvUploaded: boolean;
   introVideoUploaded: boolean;
-  availabilitySet: boolean;
   adminApproved: boolean;
 }
 
@@ -48,7 +46,6 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
     hskUploaded: false,
     cvUploaded: false,
     introVideoUploaded: false,
-    availabilitySet: false,
     adminApproved: false,
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -59,12 +56,11 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
   const completenessScore = (() => {
     try {
       const points = {
-        emailVerified: 20,
-        studentIdUploaded: 15,
-        hskUploaded: 20,
+        emailVerified: 25,
+        studentIdUploaded: 20,
+        hskUploaded: 25,
         cvUploaded: 20,
-        introVideoUploaded: 15,
-        availabilitySet: 10,
+        introVideoUploaded: 10,
         adminApproved: 0  // Admin approval required for activation but doesn't add points
       };
       
@@ -75,7 +71,6 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
         hskUploaded: false,
         cvUploaded: false,
         introVideoUploaded: false,
-        availabilitySet: false,
         adminApproved: false,
       };
       
@@ -135,9 +130,6 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
         cvUploaded: Boolean(applicationData.verificationSteps.cvUploaded && 
           applicationData.verificationSteps.cvStatus !== 'changes_requested'),
         introVideoUploaded: Boolean(applicationData.verificationSteps.introVideoUploaded),
-        availabilitySet: Boolean(applicationData.availability && 
-          applicationData.availability.schedule && 
-          applicationData.availability.schedule.length > 0),
         // Check both adminApproved in verificationSteps AND recruitmentStatus === 'approved'
         adminApproved: Boolean(applicationData.verificationSteps.adminApproved || applicationData.recruitmentStatus === 'approved'),
       };
@@ -289,18 +281,30 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
 
       const result = await response.json();
       
-      // Update verification status
-      setVerificationSteps(prev => ({
-        ...prev,
-        [type === 'student-id' ? 'studentIdUploaded' : 'hskUploaded']: true
-      }));
+      // Update verification status based on upload type
+      const stepKey = type === 'student-id' ? 'studentIdUploaded' : 
+                     type === 'hsk' ? 'hskUploaded' : 
+                     type === 'cv' ? 'cvUploaded' : null;
+      
+      if (stepKey) {
+        setVerificationSteps(prev => ({
+          ...prev,
+          [stepKey]: true
+        }));
+      }
 
       toast({
         title: "Upload Berhasil!",
         description: `${file.name} berhasil diupload.`,
       });
 
+      // Call the update callback to refresh data
       onUpdate?.();
+      
+      // Also force a local refresh after a short delay to ensure backend sync
+      setTimeout(() => {
+        onUpdate?.();
+      }, 1000);
     } catch (error: any) {
       toast({
         title: "Upload Gagal",
@@ -359,8 +363,6 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
         return <FileText className="h-5 w-5 text-gray-400" />;
       case 'introVideoUploaded':
         return <Video className="h-5 w-5 text-gray-400" />;
-      case 'availabilitySet':
-        return <Calendar className="h-5 w-5 text-gray-400" />;
       case 'adminApproved':
         return <Clock className="h-5 w-5 text-gray-400" />;
       default:
@@ -504,7 +506,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
                 </Button>
               )}
               <Badge variant={verificationSteps.emailVerified ? "default" : "outline"}>
-                20 poin
+                25 poin
               </Badge>
             </div>
           </div>
@@ -529,7 +531,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
             </div>
             <div className="flex items-center space-x-2">
               <Badge variant={verificationSteps.studentIdUploaded ? "default" : "outline"}>
-                15 poin
+                20 poin
               </Badge>
               {(!verificationSteps.studentIdUploaded || applicationData?.verificationSteps?.studentIdStatus === 'changes_requested') && (
                 <Button
@@ -574,7 +576,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
             </div>
             <div className="flex items-center space-x-2">
               <Badge variant={verificationSteps.hskUploaded ? "default" : "outline"}>
-                20 poin
+                25 poin
               </Badge>
               {(!verificationSteps.hskUploaded || applicationData?.verificationSteps?.hskStatus === 'changes_requested') && (
                 <Button
@@ -656,7 +658,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
               </div>
               <div className="flex items-center space-x-2">
                 <Badge variant={verificationSteps.introVideoUploaded ? "default" : "outline"}>
-                  15 poin
+                  10 poin
                 </Badge>
                 {!verificationSteps.introVideoUploaded && (
                   <Button
@@ -753,36 +755,6 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Availability Setup */}
-          <div className="flex items-center justify-between p-4 border rounded-lg">
-            <div className="flex items-center space-x-3">
-              {getStepIcon('availabilitySet', verificationSteps.availabilitySet)}
-              <div>
-                <h3 className="font-medium">Jadwal Ketersediaan</h3>
-                <p className="text-sm text-gray-600">Atur jadwal ketersediaan Anda untuk menerima pesanan</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Badge variant={verificationSteps.availabilitySet ? "default" : "outline"}>
-                10 poin
-              </Badge>
-              {!verificationSteps.availabilitySet && (
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={() => {
-                    // Navigate to availability tab using correct route
-                    setLocation('/translator/dashboard?tab=availability');
-                  }}
-                  disabled={isLoading || isRejectedAndLocked()}
-                >
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Atur Jadwal
-                </Button>
-              )}
-            </div>
           </div>
 
           {/* Admin Approval */}
