@@ -6,7 +6,7 @@ import BookableCalendar from "@/components/bookable-calendar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { MapPin, Star, CheckCircle, MessageSquare, ArrowLeft, Calendar } from "lucide-react";
+import { MapPin, Star, CheckCircle, MessageSquare, ArrowLeft, Calendar, GraduationCap, Clock } from "lucide-react";
 import { ServiceProvider } from "@shared/schema";
 
 export default function ProfilePage() {
@@ -54,10 +54,15 @@ export default function ProfilePage() {
         pricePerDay: student.pricePerDay || "500000",
         rating: "4.5",
         reviewCount: "New",
-        description: student.motivation || "Motivated student translator ready to help with your translation needs.",
+        description: student.description || student.motivation || "Motivated student translator ready to help with your translation needs.",
         profileImage: student.profileImage || "",
         isVerified: true,
-        languages: student.languages || [],
+        languages: student.questionnaireData?.fluentLanguages ? 
+          student.questionnaireData.fluentLanguages.map((lang: string) => ({
+            language: lang,
+            level: "Fluent"
+          })) : 
+          student.languages || [],
         availability: student.availability || null,
         isStudent: true,
         university: student.university,
@@ -100,20 +105,20 @@ export default function ProfilePage() {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="animate-pulse">
             <div className="h-8 bg-gray-200 rounded w-1/4 mb-8"></div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
               <div className="lg:col-span-1">
-                <div className="h-32 w-32 bg-gray-200 rounded-full mx-auto mb-4"></div>
-                <div className="h-6 bg-gray-200 rounded w-3/4 mx-auto mb-2"></div>
+                <div className="h-48 w-48 bg-gray-200 rounded-full mx-auto mb-6"></div>
+                <div className="h-6 bg-gray-200 rounded w-3/4 mx-auto mb-3"></div>
                 <div className="h-4 bg-gray-200 rounded w-1/2 mx-auto"></div>
               </div>
-              <div className="lg:col-span-2 space-y-6">
+              <div className="lg:col-span-2 space-y-8">
                 <div className="h-6 bg-gray-200 rounded w-1/3"></div>
-                <div className="h-20 bg-gray-200 rounded"></div>
+                <div className="h-24 bg-gray-200 rounded"></div>
                 <div className="h-6 bg-gray-200 rounded w-1/3"></div>
-                <div className="h-20 bg-gray-200 rounded"></div>
+                <div className="h-24 bg-gray-200 rounded"></div>
               </div>
             </div>
           </div>
@@ -127,11 +132,11 @@ export default function ProfilePage() {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Penerjemah tidak ditemukan</h1>
             <Link href="/search">
-              <Button>Kembali ke Pencarian</Button>
+              <Button className="bg-red-700 hover:bg-red-800">Kembali ke Pencarian</Button>
             </Link>
           </div>
         </div>
@@ -144,87 +149,117 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-gray-50">
       <Header />
       
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Back Button */}
         <Link href="/search">
-          <Button variant="ghost" className="mb-6">
+          <Button variant="ghost" className="mb-8 text-gray-600 hover:text-red-700 hover:bg-red-50">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Kembali ke Pencarian
           </Button>
         </Link>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           {/* Profile Image and Basic Info */}
           <div className="lg:col-span-1">
-            <Card>
-              <CardContent className="p-6 text-center">
-                <img 
-                  src={provider.profileImage || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=300"} 
-                  alt={provider.name} 
-                  className="w-32 h-32 rounded-full mx-auto mb-4 object-cover border-4 border-navy-200"
-                />
-                <h1 className="text-2xl font-bold text-navy-800 mb-2">{provider.name}</h1>
-                <div className="flex items-center justify-center mb-3">
-                  <MapPin className="w-4 h-4 text-silver-500 mr-2" />
-                  <span className="text-silver-600">{provider.city}, China</span>
+            <Card className="shadow-lg border-0 rounded-2xl">
+              <CardContent className="p-8 text-center">
+                <div className="relative inline-block mb-6">
+                  <img 
+                    src={provider.profileImage || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236B7280'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E"} 
+                    alt={provider.name} 
+                    className="w-48 h-48 rounded-full object-cover border-4 border-red-100 shadow-xl"
+                  />
+                  {provider.isVerified && (
+                    <div className="absolute -top-2 -right-2 bg-green-500 flex items-center gap-2 text-white rounded-full p-2 shadow-lg">
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="text-white text-xs">Terverifikasi</span>
+                    </div>
+                  )}
                 </div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-3">{provider.name}</h1>
                 <div className="flex items-center justify-center mb-4">
-                  <div className="flex text-yellow-400 mr-2">
+                  <MapPin className="w-5 h-5 text-red-600 mr-2" />
+                  <span className="text-gray-600 font-medium">{provider.city}, China</span>
+                </div>
+                <div className="flex items-center justify-center mb-6">
+                  <div className="flex text-yellow-400 mr-3">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <Star 
                         key={i} 
-                        className={`w-4 h-4 ${i < Math.floor(parseFloat(provider.rating || "0")) ? "fill-current" : ""}`} 
+                        className={`w-5 h-5 ${i < Math.floor(parseFloat(provider.rating || "0")) ? "fill-current" : ""}`} 
                       />
                     ))}
                   </div>
-                  <span className="text-sm text-silver-600">
+                  <span className="text-sm text-gray-600 font-medium">
                     {provider.rating} {provider.isStudent ? '(New Student)' : `(${provider.reviewCount} ulasan)`}
                   </span>
                 </div>
-                <div className="space-y-2">
-                  {provider.isVerified && (
-                    <Badge className="bg-green-100 text-green-800 flex items-center gap-1 w-fit mx-auto">
-                      <CheckCircle className="w-3 h-3" />
-                      Terverifikasi
-                    </Badge>
-                  )}
-                  
-                  <div className="text-2xl font-bold text-navy-600">Rp {provider.pricePerDay}/hari</div>
-                </div>
+                
+                <div className="text-3xl font-bold mb-4">Rp {provider.pricePerDay}/hari</div>
+                
+                {/* Services */}
+                {(provider.services as string[]) && Array.isArray(provider.services) && (provider.services as string[]).length > 0 && (
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {(provider.services as string[]).slice(0, 3).map((service) => (
+                      <Badge 
+                        key={service} 
+                        variant="secondary" 
+                        className="bg-red-100 text-red-800 border-0 text-xs font-medium px-3 py-1 rounded-full"
+                      >
+                        {getServiceLabel(service)}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
 
           {/* Detailed Information */}
           <div className="lg:col-span-2">
-            <div className="space-y-6">
+            <div className="space-y-8">
               {/* Student-specific information */}
               {provider.isStudent && (
-                <Card>
-                  <CardContent className="p-6">
-                    <h2 className="text-lg font-semibold text-navy-800 mb-3">Academic Information</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="shadow-lg border-0 rounded-2xl">
+                  <CardContent className="p-8">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+                      <div className="w-2 h-10 bg-red-600 rounded-full mr-4"></div>
+                      Academic Information
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {provider.university && (
-                        <div>
-                          <div className="text-sm text-gray-600">University</div>
-                          <div className="font-medium">{provider.university}</div>
+                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                          <GraduationCap className="w-5 h-5 text-red-600 mr-3" />
+                          <div>
+                            <div className="text-sm text-gray-600 font-medium">University</div>
+                            <div className="font-semibold text-gray-900">{provider.university}</div>
+                          </div>
                         </div>
                       )}
                       {provider.expectedGraduation && (
-                        <div>
-                          <div className="text-sm text-gray-600">Expected Graduation</div>
-                          <div className="font-medium">{provider.expectedGraduation}</div>
+                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                          <Clock className="w-5 h-5 text-red-600 mr-3" />
+                          <div>
+                            <div className="text-sm text-gray-600 font-medium">Expected Graduation</div>
+                            <div className="font-semibold text-gray-900">{provider.expectedGraduation}</div>
+                          </div>
                         </div>
                       )}
                       {provider.hskLevel && (
-                        <div>
-                          <div className="text-sm text-gray-600">HSK Level</div>
-                          <div className="font-medium">{provider.hskLevel}</div>
+                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                          <div className="w-5 h-5 bg-red-500 rounded-full mr-3"></div>
+                          <div>
+                            <div className="text-sm text-gray-600 font-medium">HSK Level</div>
+                            <div className="font-semibold text-gray-900">{provider.hskLevel}</div>
+                          </div>
                         </div>
                       )}
-                      <div>
-                        <div className="text-sm text-gray-600">Experience</div>
-                        <div className="font-medium">{provider.experience} years</div>
+                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                        <div className="w-5 h-5 bg-blue-500 rounded-full mr-3"></div>
+                        <div>
+                          <div className="text-sm text-gray-600 font-medium">Experience</div>
+                          <div className="font-semibold text-gray-900">{provider.experience} years</div>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -232,20 +267,57 @@ export default function ProfilePage() {
               )}
 
               {/* Description */}
-              <Card>
-                <CardContent className="p-6">
-                  <h2 className="text-lg font-semibold text-navy-800 mb-3">Diskripsi Student</h2>
-                  <p className="text-gray-700 leading-relaxed">
-                    {typeof provider.description === 'string' ? provider.description : "No description available"}
-                  </p>
+              <Card className="shadow-lg border-0 rounded-2xl">
+                <CardContent className="p-8">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+                    <div className="w-2 h-10 bg-red-600 rounded-full mr-4"></div>
+                    Deskripsi Student
+                  </h2>
+                  <div className="bg-gray-50 rounded-xl p-6">
+                    <p className="text-gray-700 leading-relaxed text-lg">
+                      {(provider as any).description || "No description available"}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Languages */}
+              <Card className="shadow-lg border-0 rounded-2xl">
+                <CardContent className="p-8">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+                    <div className="w-2 h-10 bg-red-600 rounded-full mr-4"></div>
+                    Bahasa yang Dikuasai
+                  </h2>
+                  {(provider.languages as any[]) && Array.isArray(provider.languages) && (provider.languages as any[]).length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {(provider.languages as any[]).map((lang: any, index: number) => {
+                        const levelInfo = getLanguageLevel(lang.level);
+                        return (
+                          <div key={index} className="flex items-center p-4 bg-gray-50 rounded-xl">
+                            <span className={`w-4 h-4 ${levelInfo.color} rounded-full mr-3`}></span>
+                            <div>
+                              <div className="font-semibold text-gray-900">{lang.language}</div>
+                              <div className="text-sm text-gray-600">{levelInfo.label}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <p className="text-lg">No language information available</p>
+                      <p className="text-sm text-gray-400 mt-2">Contact the student to learn about their language skills</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
               {/* Availability Calendar */}
-              <Card>
-                <CardContent className="p-6">
-                  <h2 className="text-lg font-semibold text-navy-800 mb-3 flex items-center gap-2">
-                    <Calendar className="h-5 w-5" />
+              <Card className="shadow-lg border-0 rounded-2xl">
+                <CardContent className="p-8">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+                    <div className="w-2 h-10 bg-red-600 rounded-full mr-4"></div>
+                    <Calendar className="h-6 w-6 mr-3 text-red-600" />
                     {provider.isStudent ? "Student's Availability" : "Availability"}
                   </h2>
                   {provider.availability ? (
@@ -256,50 +328,29 @@ export default function ProfilePage() {
                       pricePerDay={provider.pricePerDay}
                     />
                   ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                      <p>No availability information set</p>
+                    <div className="text-center py-12 text-gray-500">
+                      <Calendar className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                      <p className="text-lg">No availability information set</p>
                     </div>
                   )}
                 </CardContent>
               </Card>
 
-              {/* Languages */}
-              {provider.languages && Array.isArray(provider.languages) && provider.languages.length > 0 && (
-                <Card>
-                  <CardContent className="p-6">
-                    <h2 className="text-lg font-semibold text-navy-800 mb-3">Bahasa yang Dikuasai</h2>
-                    <div className="grid grid-cols-2 gap-3">
-                      {(provider.languages as any[]).map((lang, index) => {
-                        const levelInfo = getLanguageLevel(lang.level);
-                        return (
-                          <div key={index} className="flex items-center">
-                            <span className={`w-3 h-3 ${levelInfo.color} rounded-full mr-2`}></span>
-                            {lang.language} ({levelInfo.label})
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
               {/* Contact Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col sm:flex-row gap-6">
                 <Button 
                   onClick={handleWhatsAppContact}
-                  className="flex-1 bg-green-500 hover:bg-green-600 text-white"
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-4 text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
                   size="lg"
                 >
-                  <MessageSquare className="w-4 h-4 mr-2" />
+                  <MessageSquare className="w-5 h-5 mr-3" />
                   Hubungi via WhatsApp
                 </Button>
                 <Button 
-                  variant="outline" 
-                  className="flex-1 border-navy-600 text-navy-600 hover:bg-navy-600 hover:text-white"
+                  className="flex-1 bg-red-700 hover:bg-red-800 text-white py-4 text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
                   size="lg"
                 >
-                  <MessageSquare className="w-4 h-4 mr-2" />
+                  <MessageSquare className="w-5 h-5 mr-3" />
                   {provider.isStudent ? 'Book Student' : 'Kirim Pesan'}
                 </Button>
               </div>
@@ -308,7 +359,9 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <Footer />
+      <div className="mt-20">
+        <Footer />
+      </div>
     </div>
   );
 }

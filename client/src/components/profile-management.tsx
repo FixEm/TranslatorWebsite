@@ -17,6 +17,7 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   
   // Form data
   const [profileData, setProfileData] = useState({
@@ -41,6 +42,33 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
       ...prev,
       [field]: value
     }));
+  };
+
+  const handleProfileImageChange = async (file: File) => {
+    if (!applicationData?.id) {
+      toast({ title: "Error", description: "Application data not found.", variant: "destructive" });
+      return;
+    }
+    const formData = new FormData();
+    formData.append('profileImage', file);
+
+    setIsUploadingImage(true);
+    try {
+      const response = await fetch(`/api/applications/${applicationData.id}/upload`, {
+        method: 'PATCH',
+        body: formData,
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to upload profile image');
+      }
+      toast({ title: 'Profile photo updated' });
+      onUpdate?.();
+    } catch (error: any) {
+      toast({ title: 'Upload failed', description: error.message || 'Unable to upload image', variant: 'destructive' });
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   const handleSave = async () => {
@@ -115,6 +143,23 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
     return Array.isArray(applicationData.services) ? applicationData.services : [];
   };
 
+  // Compute completeness score locally to match VerificationStatus
+  const completenessScore = (() => {
+    try {
+      const points = { emailVerified: 25, studentIdUploaded: 20, hskUploaded: 25, cvUploaded: 20, introVideoUploaded: 10 } as const;
+      const steps: any = applicationData?.verificationSteps || {};
+      let score = 0;
+      if (steps.emailVerified) score += points.emailVerified;
+      if (steps.studentIdUploaded && steps.studentIdStatus !== 'changes_requested') score += points.studentIdUploaded;
+      if (steps.hskUploaded && steps.hskStatus !== 'changes_requested') score += points.hskUploaded;
+      if (steps.cvUploaded && steps.cvStatus !== 'changes_requested') score += points.cvUploaded;
+      if (steps.introVideoUploaded) score += points.introVideoUploaded;
+      return Math.max(0, Math.min(100, score));
+    } catch {
+      return 0;
+    }
+  })();
+
   if (!applicationData) {
     return (
       <div className="text-center py-12">
@@ -147,6 +192,35 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Profile image + uploader */}
+          <div className="flex items-center gap-4">
+            <img
+              src={applicationData.profileImage || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=60"}
+              alt={applicationData.name}
+              className="w-20 h-20 rounded-full object-cover border-4 border-navy-200"
+            />
+            <div>
+              <input
+                id="profile-image-input"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleProfileImageChange(file);
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => (document.getElementById('profile-image-input') as HTMLInputElement)?.click()}
+                disabled={isUploadingImage}
+              >
+                {isUploadingImage ? 'Uploading...' : 'Change Photo'}
+              </Button>
+            </div>
+          </div>
+
           {/* Read-only Basic Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -291,7 +365,7 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-600">Completeness Score</Label>
-              <p className="text-lg font-semibold">{applicationData.completenessScore || 0}/100</p>
+              <p className="text-lg font-semibold">{completenessScore}/100</p>
             </div>
           </div>
         </CardContent>

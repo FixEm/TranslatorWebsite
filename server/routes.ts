@@ -698,6 +698,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedApp = await storage.getApplication(id);
       
       console.log("✅ Application updated successfully");
+      // Sync selected fields to service_providers profile (if exists)
+      try {
+        if (updatedApp) {
+          const providers = await storage.getServiceProviders({ email: (updatedApp as any).email });
+          if (providers.length > 0) {
+            const providerId = providers[0].id;
+            const providerUpdates: any = {};
+            ["description", "pricePerDay", "whatsapp", "profileImage"].forEach((field) => {
+              if ((updates as any)[field] !== undefined) providerUpdates[field] = (updates as any)[field];
+            });
+            if (Object.keys(providerUpdates).length > 0) {
+              console.log("🔄 Syncing provider updates:", providerUpdates);
+              await storage.updateServiceProvider(providerId, providerUpdates);
+            }
+          }
+        }
+      } catch (syncError) {
+        console.error("⚠️ Failed to sync updates to service provider:", syncError);
+      }
+
       res.json({ message: "Application updated successfully", application: updatedApp });
     } catch (error) {
       console.error("❌ Error updating application:", error);
@@ -772,6 +792,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log("✅ Application updated with files successfully");
+
+      // Sync uploaded profile image (and any passed text fields) to service provider profile
+      try {
+        const providers = await storage.getServiceProviders({ email: (updatedApp as any).email });
+        if (providers.length > 0) {
+          const providerId = providers[0].id;
+          const providerUpdates: any = {};
+          ["profileImage", "description", "pricePerDay", "whatsapp"].forEach((field) => {
+            if ((updates as any)[field] !== undefined) providerUpdates[field] = (updates as any)[field];
+          });
+          // Ensure we propagate new profile image URL if present on updatedApp
+          if ((updatedApp as any).profileImage) {
+            providerUpdates.profileImage = (updatedApp as any).profileImage;
+          }
+          if (Object.keys(providerUpdates).length > 0) {
+            console.log("🔄 Syncing provider after upload:", providerUpdates);
+            await storage.updateServiceProvider(providerId, providerUpdates);
+          }
+        }
+      } catch (syncError) {
+        console.error("⚠️ Failed to sync provider after upload:", syncError);
+      }
       res.json({ 
         message: "Application updated successfully", 
         application: updatedApp,
@@ -1322,22 +1364,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // BOOKING ENDPOINTS
   // ============================================================================
 
-  // Create a new booking
+  // Create a new booking (conflict-aware)
   app.post('/api/bookings', async (req, res) => {
     try {
+      const incoming = req.body;
       const bookingData = {
-        ...req.body,
-        id: Date.now().toString(),
-        createdAt: new Date(),
-        status: 'pending'
+        ...incoming,
+        providerId: incoming.providerId || incoming.translatorId,
+        date: incoming.date || incoming.bookingDate,
+        status: incoming.status || 'pending'
       };
 
-      console.log('📅 Creating booking:', bookingData);
+      console.log('📅 Creating booking with conflict check:', bookingData);
       const booking = await storage.createBooking(bookingData);
       
       res.status(201).json(booking);
     } catch (error) {
       console.error('❌ Error creating booking:', error);
+      if (typeof error === 'object' && error && (error as any).code === 'date_conflict') {
+        return res.status(409).json({ message: 'Requested date(s) unavailable' });
+      }
       res.status(500).json({ message: 'Failed to create booking' });
     }
   });
@@ -1406,6 +1452,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('❌ Error fetching booking:', error);
       res.status(500).json({ message: 'Failed to fetch booking' });
+    }
+  });
+
+  // Provider calendar cache: get unavailable dates
+  app.get('/api/provider-calendars/:providerId', async (req, res) => {
+    try {
+      const { providerId } = req.params;
+      const calendar = await storage.getProviderCalendar(providerId);
+      if (!calendar) {
+        await storage.rebuildAndSaveProviderCalendar(providerId);
+        const rebuilt = await storage.getProviderCalendar(providerId);
+        return res.json(rebuilt || { providerId, unavailableDates: [], lastUpdated: new Date() });
+      }
+      res.json(calendar);
+    } catch (error) {
+      console.error('❌ Error fetching provider calendar:', error);
+      res.status(500).json({ message: 'Failed to fetch provider calendar' });
     }
   });
 

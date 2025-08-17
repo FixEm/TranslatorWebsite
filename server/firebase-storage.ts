@@ -9,6 +9,7 @@ export class FirebaseStorage {
   private contactsCollection = db.collection('contacts');
   private jobsCollection = db.collection('jobs');
   private bookingsCollection = db.collection('bookings');
+  private providerCalendarsCollection = db.collection('provider_calendars');
 
   async getUser(id: string): Promise<User | undefined> {
     const doc = await this.usersCollection.doc(id).get();
@@ -25,7 +26,7 @@ export class FirebaseStorage {
 
   async createUser(user: InsertUser): Promise<User> {
     const docRef = await this.usersCollection.add(user);
-    return { id: docRef.id, ...user };
+    return { id: docRef.id, ...user, status: 'pending' as const };
   }
 
   async getServiceProviders(filters?: { city?: string; services?: string[]; minRating?: number; email?: string }): Promise<ServiceProvider[]> {
@@ -796,13 +797,36 @@ export class FirebaseStorage {
 
   // NEW: Booking methods
   async createBooking(bookingData: any): Promise<any> {
-    const docRef = await this.bookingsCollection.add({
+    // Normalize requested dates (single-day or multi-day)
+    const requestedDates = this.extractRequestedDates(bookingData);
+    if (!bookingData.providerId) {
+      throw new Error('providerId is required');
+    }
+
+    // Conflict check against pending + confirmed bookings
+    const hasConflict = await this.doesConflictExist(bookingData.providerId, requestedDates);
+    if (hasConflict) {
+      const error: any = new Error('Requested date(s) are unavailable');
+      error.code = 'date_conflict';
+      throw error;
+    }
+
+    const payload: any = {
       ...bookingData,
+      // Persist dateRange as array of dates for multi-day, keep single date for one-day
+      ...(requestedDates.length > 1
+        ? { dateRange: requestedDates, date: undefined }
+        : { date: requestedDates[0] }),
       createdAt: new Date(),
       updatedAt: new Date()
-    });
+    };
+
+    const docRef = await this.bookingsCollection.add(payload);
+
+    // Rebuild provider calendar cache
+    await this.rebuildAndSaveProviderCalendar(bookingData.providerId);
     
-    return { id: docRef.id, ...bookingData };
+    return { id: docRef.id, ...payload };
   }
 
   async getBookings(filters?: { status?: string; providerId?: string; clientEmail?: string }): Promise<any[]> {
@@ -869,11 +893,124 @@ export class FirebaseStorage {
     if (adminNotes) {
       updateData.adminNotes = adminNotes;
     }
-    
+    // Read booking to get providerId before update
+    const existing = await this.getBooking(id);
     await this.bookingsCollection.doc(id).update(updateData);
     
     const updatedBooking = await this.getBooking(id);
+    
+    // Rebuild provider calendar cache after status change
+    if (existing?.providerId) {
+      await this.rebuildAndSaveProviderCalendar(existing.providerId);
+    }
+    
     return updatedBooking;
+  }
+
+  // Compute unavailable dates for provider from pending + confirmed bookings
+  private async computeUnavailableDates(providerId: string): Promise<string[]> {
+    let query: any = this.bookingsCollection.where('providerId', '==', providerId);
+    const snapshot = await query.get();
+    const dates: string[] = [];
+    snapshot.forEach((doc: any) => {
+      const data = doc.data();
+      if (data.status === 'cancelled') return;
+      if (Array.isArray(data.dateRange) && data.dateRange.length > 0) {
+        data.dateRange.forEach((d: string) => dates.push(d));
+      } else if (data.date) {
+        dates.push(data.date);
+      }
+    });
+    // Unique + sorted
+    const unique = Array.from(new Set(dates));
+    unique.sort();
+    return unique;
+  }
+
+  private extractRequestedDates(bookingData: any): string[] {
+    // If dateRange is already an array of dates, use it
+    if (Array.isArray(bookingData.dateRange) && bookingData.dateRange.length > 0) {
+      return bookingData.dateRange.map((d: any) => String(d));
+    }
+    // If dateRange is [start, end], expand inclusively
+    if (
+      bookingData.dateRange &&
+      Array.isArray(bookingData.dateRange) &&
+      bookingData.dateRange.length === 2 &&
+      typeof bookingData.dateRange[0] === 'string' &&
+      typeof bookingData.dateRange[1] === 'string'
+    ) {
+      return this.expandDateRange(bookingData.dateRange[0], bookingData.dateRange[1]);
+    }
+    // Support alternate field names
+    if (bookingData.startDate && bookingData.endDate) {
+      return this.expandDateRange(String(bookingData.startDate), String(bookingData.endDate));
+    }
+    if (bookingData.bookingDate) {
+      return [String(bookingData.bookingDate)];
+    }
+    // Fallback to single date
+    if (bookingData.date) {
+      return [String(bookingData.date)];
+    }
+    return [];
+  }
+
+  private expandDateRange(start: string, end: string): string[] {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    const dates: string[] = [];
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return dates;
+    for (
+      let d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      d <= new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+      d.setDate(d.getDate() + 1)
+    ) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      dates.push(`${y}-${m}-${day}`);
+    }
+    return dates;
+  }
+
+  private async doesConflictExist(providerId: string, requestedDates: string[]): Promise<boolean> {
+    if (requestedDates.length === 0) return false;
+    const snapshot = await this.bookingsCollection.where('providerId', '==', providerId).get();
+    const activeDates: Set<string> = new Set();
+    snapshot.forEach((doc: any) => {
+      const data = doc.data();
+      if (data.status === 'cancelled') return;
+      if (Array.isArray(data.dateRange) && data.dateRange.length > 0) {
+        data.dateRange.forEach((d: string) => activeDates.add(String(d)));
+      } else if (data.date) {
+        activeDates.add(String(data.date));
+      } else if (data.bookingDate) {
+        activeDates.add(String(data.bookingDate));
+      }
+    });
+    return requestedDates.some(d => activeDates.has(String(d)));
+  }
+
+  async rebuildAndSaveProviderCalendar(providerId: string): Promise<void> {
+    const unavailableDates = await this.computeUnavailableDates(providerId);
+    const docRef = this.providerCalendarsCollection.doc(providerId);
+    await docRef.set({
+      providerId,
+      unavailableDates,
+      lastUpdated: new Date()
+    }, { merge: true });
+  }
+
+  async getProviderCalendar(providerId: string): Promise<{ providerId: string; unavailableDates: string[]; lastUpdated: any } | undefined> {
+    const doc = await this.providerCalendarsCollection.doc(providerId).get();
+    if (!doc.exists) return undefined;
+    const data = doc.data() || {};
+    return {
+      providerId: data.providerId || providerId,
+      unavailableDates: Array.isArray(data.unavailableDates) ? data.unavailableDates : [],
+      lastUpdated: data.lastUpdated || new Date()
+    };
   }
 
   // NEW: File upload method

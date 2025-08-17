@@ -39,7 +39,7 @@ export default function Header() {
             <Link 
               href="/" 
               className={`font-semibold transition-all duration-200 hover:scale-105 ${
-                isActive("/") ? "text-red-600" : "text-slate-700 hover:text-red-600"
+                isActive("/") ? "text-red-700" : "text-slate-700 hover:text-red-700"
               }`}
             >
               Beranda
@@ -47,20 +47,20 @@ export default function Header() {
             <Link 
               href="/search" 
               className={`font-semibold transition-all duration-200 hover:scale-105 ${
-                isActive("/search") ? "text-red-600" : "text-slate-700 hover:text-red-600"
+                isActive("/search") ? "text-red-700" : "text-slate-700 hover:text-red-700"
               }`}
             >
-              Cari Penerjemah
+              Cari Translator
             </Link>
             <a 
               href="#cara-kerja" 
-              className="text-slate-700 hover:text-red-600 font-semibold transition-all duration-200 hover:scale-105"
+              className="text-slate-700 hover:text-red-700 font-semibold transition-all duration-200 hover:scale-105"
             >
               Cara Kerja
             </a>
             <a 
               href="#tentang" 
-              className="text-slate-700 hover:text-red-600 font-semibold transition-all duration-200 hover:scale-105"
+              className="text-slate-700 hover:text-red-700 font-semibold transition-all duration-200 hover:scale-105"
             >
               Tentang
             </a>
@@ -72,14 +72,14 @@ export default function Header() {
               <div className="flex items-center space-x-6">
                 <Link href="/translator/dashboard">
                   <span className={`font-semibold transition-all duration-200 hover:scale-105 ${
-                    isActive("/translator/dashboard") ? "text-red-600" : "text-slate-700 hover:text-red-600"
+                    isActive("/translator/dashboard") ? "text-red-700" : "text-slate-700 hover:text-red-700"
                   }`}>
                     Dashboard
                   </span>
                 </Link>
                 <Link href="/chat">
                   <span className={`font-semibold transition-all duration-200 hover:scale-105 flex items-center space-x-1 ${
-                    isActive("/chat") ? "text-red-600" : "text-slate-700 hover:text-red-600"
+                    isActive("/chat") ? "text-red-700" : "text-slate-700 hover:text-red-700"
                   }`}>
                     <MessageSquare className="h-5 w-5" />
                
@@ -88,7 +88,7 @@ export default function Header() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className={`font-semibold transition-all duration-200 hover:scale-105 flex items-center space-x-1 ${
-                      isActive("/profile") ? "text-red-600" : "text-slate-700 hover:text-red-600"
+                      isActive("/profile") ? "text-red-700" : "text-slate-700 hover:text-red-700"
                     }`}>
                       <User className="h-5 w-5" />
                       <ChevronDown className="h-4 w-4" />
@@ -142,8 +142,8 @@ export default function Header() {
                   </Button>
                 </Link>
                 <Link href="/translator/signup">
-                  <Button className="bg-premium text-white px-6 py-3 rounded-xl hover:bg-premium bg-red-700 hover:bg-red-800 shadow-elegant hover:shadow-luxury transition-all duration-300 font-semibold tracking-wide hover:scale-105 transform">
-                    Daftar Sebagai Penerjemah
+                  <Button className="bg-red-700 hover:bg-red-800 text-white">
+                    Daftar Sebagai Translator
                   </Button>
                 </Link>
               </>
