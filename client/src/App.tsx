@@ -10,35 +10,38 @@ import Profile from "@/pages/profile";
 import Login from "@/pages/login";
 import Admin from "@/pages/admin";
 import TranslatorSignup from "@/pages/translator-signup";
+import ClientSignup from "./pages/client-signup";
 import TranslatorDashboard from "@/pages/translator-dashboard";
+
 import NotFound from "@/pages/not-found";
 
 function Router() {
-  return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/search" component={Search} />
-      <Route path="/profile/:id" component={Profile} />
-      <Route path="/login" component={Login} />
-      <Route path="/admin" component={Admin} />
-      <Route path="/translator/signup" component={TranslatorSignup} />
-      <Route path="/translator/dashboard" component={TranslatorDashboard} />
-      <Route component={NotFound} />
-    </Switch>
-  );
+	return (
+		<Switch>
+			<Route path="/" component={Home} />
+			<Route path="/search" component={Search} />
+			<Route path="/profile/:id" component={Profile} />
+			<Route path="/login" component={Login} />
+			<Route path="/admin" component={Admin} />
+			<Route path="/translator/signup" component={TranslatorSignup} />
+			<Route path="/client/signup" component={ClientSignup} />
+			<Route path="/translator/dashboard" component={TranslatorDashboard} />
+			<Route component={NotFound} />
+		</Switch>
+	);
 }
 
 function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
-  );
+	return (
+		<QueryClientProvider client={queryClient}>
+			<AuthProvider>
+				<TooltipProvider>
+					<Toaster />
+					<Router />
+				</TooltipProvider>
+			</AuthProvider>
+		</QueryClientProvider>
+	);
 }
 
 export default App;
