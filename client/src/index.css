@@ -68,6 +68,16 @@
   --indigo-700: hsl(239 84% 51%);
   --indigo-800: hsl(239 84% 43%);
   --indigo-900: hsl(239 84% 35%);
+
+  /* Brand red accents */
+  --brand-50: #fef2f2;
+  --brand-100: #fee2e2;
+  --brand-200: #fecaca;
+  --brand-300: #fca5a5;
+  --brand-400: #f87171;
+  --brand-500: #ef4444;
+  --brand-600: #dc2626;
+  --brand-700: #b91c1c;
 }
 
 .dark {

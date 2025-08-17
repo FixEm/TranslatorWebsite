@@ -381,7 +381,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
       {/* Progress Overview */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-gray-900">
             <Star className="h-5 w-5 text-yellow-500" />
             Status Verifikasi Akun
           </CardTitle>
@@ -397,7 +397,8 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
                 {completenessScore}/100 poin
               </span>
             </div>
-            <Progress value={completenessScore} className="h-2" />
+            <Progress value={completenessScore} className="h-2 [&>div]:bg-green-500" />
+
             <p className="text-xs text-gray-600">
               Isikan semua data yang diperlukan untuk review admin. Akun akan diaktivasi setelah persetujuan admin.
             </p>
@@ -466,11 +467,11 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
         
         {/* Rejection Overlay */}
         {isRejectedAndLocked() && (
-          <div className="absolute inset-0 bg-gray-900/20 rounded-lg flex items-center justify-center z-10">
-            <div className="bg-white p-4 rounded-lg shadow-lg border border-red-200 max-w-sm text-center">
-              <div className="text-red-500 text-2xl mb-2">🔒</div>
-              <h4 className="font-medium text-red-800 mb-1">Verifikasi Dikunci</h4>
-              <p className="text-sm text-red-700">
+          <div className="absolute inset-0 bg-white/60 rounded-lg flex items-center justify-center z-10">
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-[var(--brand-200)] max-w-sm text-center">
+              <div className="text-[var(--brand-600)] text-2xl mb-2">🔒</div>
+              <h4 className="font-medium text-[var(--brand-700)] mb-1">Verifikasi Dikunci</h4>
+              <p className="text-sm text-[var(--brand-600)]">
                 Pendaftaran ditolak. Anda dapat mengajukan ulang setelah 3 bulan.
               </p>
             </div>
@@ -505,7 +506,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
                   Kirim Ulang
                 </Button>
               )}
-              <Badge variant={verificationSteps.emailVerified ? "default" : "outline"}>
+              <Badge variant={verificationSteps.emailVerified ? "default" : "outline"} className="bg-red-700">
                 25 poin
               </Badge>
             </div>
@@ -530,7 +531,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge variant={verificationSteps.studentIdUploaded ? "default" : "outline"}>
+              <Badge variant={verificationSteps.studentIdUploaded ? "default" : "outline"} className="bg-red-700">
                 20 poin
               </Badge>
               {(!verificationSteps.studentIdUploaded || applicationData?.verificationSteps?.studentIdStatus === 'changes_requested') && (
@@ -575,7 +576,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge variant={verificationSteps.hskUploaded ? "default" : "outline"}>
+              <Badge variant={verificationSteps.hskUploaded ? "default" : "outline"} className="bg-red-700">
                 25 poin
               </Badge>
               {(!verificationSteps.hskUploaded || applicationData?.verificationSteps?.hskStatus === 'changes_requested') && (
@@ -620,7 +621,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge variant={verificationSteps.cvUploaded ? "default" : "outline"}>
+              <Badge variant={verificationSteps.cvUploaded ? "default" : "outline"} className="bg-red-700">
                 20 poin
               </Badge>
               {(!verificationSteps.cvUploaded || applicationData?.verificationSteps?.cvStatus === 'changes_requested') && (
@@ -657,7 +658,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <Badge variant={verificationSteps.introVideoUploaded ? "default" : "outline"}>
+                <Badge variant={verificationSteps.introVideoUploaded ? "default" : "outline"} className="bg-red-700">
                   10 poin
                 </Badge>
                 {!verificationSteps.introVideoUploaded && (
@@ -741,17 +742,9 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
             {/* Show video link if uploaded */}
             {verificationSteps.introVideoUploaded && applicationData?.introVideo && (
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-green-800">✅ Video perkenalan telah diupload</span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => window.open(applicationData.introVideo, '_blank')}
-                    className="text-xs"
-                  >
-                    <ExternalLink className="h-3 w-3 mr-1" />
-                    Lihat Video
-                  </Button>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  <p className="font-medium text-green-800">Video perkenalan telah diupload</p>
                 </div>
               </div>
             )}
@@ -773,7 +766,7 @@ export default function VerificationStatus({ userId, applicationData, onUpdate }
                 </p>
               </div>
             </div>
-            <Badge variant={verificationSteps.adminApproved ? "default" : "outline"}>
+            <Badge variant={verificationSteps.adminApproved ? "default" : "outline"} className="bg-red-700">
               {verificationSteps.adminApproved ? "Terverifikasi" : "Persetujuan Admin"}
             </Badge>
           </div>

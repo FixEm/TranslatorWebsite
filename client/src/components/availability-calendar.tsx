@@ -378,17 +378,6 @@ export default function AvailabilityCalendar({
           <h2 className="text-2xl font-bold text-navy-800">Kelola Ketersediaan</h2>
           <p className="text-gray-600">Pilih tanggal-tanggal ketika Anda tersedia untuk bekerja</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="general-availability">Tersedia Secara Umum:</Label>
-          <Switch
-            id="general-availability"
-            checked={availability.isAvailable}
-            onCheckedChange={(checked) => 
-              setAvailability(prev => ({ ...prev, isAvailable: checked, lastUpdated: new Date() }))
-            }
-            disabled={readOnly}
-          />
-        </div>
       </div>
 
       {/* Quick Actions */}

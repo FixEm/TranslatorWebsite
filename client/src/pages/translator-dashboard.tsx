@@ -926,9 +926,13 @@ export default function TranslatorDashboard() {
                       <SidebarMenuButton
                         isActive={item.isActive}
                         onClick={() => handleTabChange(item.key)}
+                        className={`${item.isActive ? "relative bg-red-50 text-red-700 " : ""}group hover:!bg-red-50 hover:!text-red-700 active:!bg-red-50 active:!text-red-700 data-[active=true]:!bg-red-50 data-[active=true]:!text-red-700`}
                       >
-                        <item.icon className="h-4 w-4" />
+                        <item.icon className={`${item.isActive ? "h-4 w-4 text-red-600" : "h-4 w-4"} group-hover:!text-red-700 group-active:!text-red-700 data-[active=true]:!text-red-600`} />
                         <span>{item.title}</span>
+                        {item.isActive && (
+                          <span className="absolute left-0 top-0 h-full w-1 bg-red-600 rounded-r" />
+                        )}
                         {item.key === 'notifications' && 
                          (applicationData as any)?.changeRequests?.requests && 
                          (applicationData as any).changeRequests.requests.length > 0 && (
@@ -985,7 +989,7 @@ export default function TranslatorDashboard() {
 
         {/* Main Content */}
         <SidebarInset>
-          <header className="flex h-16 shrink-0 items-center gap-2 border-b border-gray-200 px-4">
+          <header className="flex h-16 shrink-0 items-center gap-2 border-b border-gray-200 px-4 bg-white/70 backdrop-blur">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 h-4" />
             <h1 className="text-lg font-semibold text-navy-800">
