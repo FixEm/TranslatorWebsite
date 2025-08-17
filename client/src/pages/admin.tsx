@@ -56,6 +56,30 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [bookedDates, setBookedDates] = useState<string[]>([]);
+
+  // Fetch booked/unavailable dates for selected student (pending + confirmed)
+  useEffect(() => {
+    const fetchBooked = async () => {
+      try {
+        if (!selectedStudent?.id) {
+          setBookedDates([]);
+          return;
+        }
+        const resp = await fetch(`/api/provider-calendars/${selectedStudent.id}`);
+        if (resp.ok) {
+          const calendar = await resp.json();
+          const dates = Array.isArray(calendar?.unavailableDates) ? calendar.unavailableDates : [];
+          setBookedDates(dates);
+        } else {
+          setBookedDates([]);
+        }
+      } catch {
+        setBookedDates([]);
+      }
+    };
+    fetchBooked();
+  }, [selectedStudent?.id]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [studentTypeFilter, setStudentTypeFilter] = useState("all");  // New state for student type filtering
@@ -1584,7 +1608,18 @@ export default function AdminPage() {
                                     <div>
                                       <span className="text-blue-700">Total Available Days:</span>
                                       <span className="font-medium ml-2">
-                                        {selectedStudent.availability.schedule.filter((s: any) => s.isAvailable).length} days
+                                        {(() => {
+                                          try {
+                                            const avail = (selectedStudent.availability.schedule || [])
+                                              .filter((s: any) => s.isAvailable)
+                                              .map((s: any) => s.date);
+                                            const booked = new Set(bookedDates || []);
+                                            const net = avail.filter((d: string) => !booked.has(d)).length;
+                                            return `${net} days`;
+                                          } catch {
+                                            return `${selectedStudent.availability.schedule.filter((s: any) => s.isAvailable).length} days`;
+                                          }
+                                        })()}
                                       </span>
                                     </div>
                                     <div>
@@ -1636,6 +1671,7 @@ export default function AdminPage() {
                                 <div className="border rounded-lg overflow-hidden">
                                   <div className="bg-gray-50 p-3 border-b">
                                     <h4 className="font-medium">Availability Calendar</h4>
+                                    <div className="text-xs text-gray-500">Booked days are highlighted in red</div>
                                   </div>
                                   <div className="p-4">
                                     {(() => {
@@ -1671,11 +1707,13 @@ export default function AdminPage() {
                                         for (let i = 0; i < 42; i++) {
                                           const date = new Date(startDate);
                                           date.setDate(startDate.getDate() + i);
+                                          const dateStr = formatDateUTC7(date);
                                           dates.push({
                                             date,
                                             isCurrentMonth: date.getMonth() === month,
                                             isToday: date.toDateString() === today.toDateString(),
-                                            isAvailable: availableDates.includes(formatDateUTC7(date))
+                                            isAvailable: availableDates.includes(dateStr),
+                                            isBooked: bookedDates.includes(dateStr)
                                           });
                                         }
                                         
@@ -1711,16 +1749,18 @@ export default function AdminPage() {
                                                 ))}
 
                                                 {/* Calendar Dates */}
-                                                {currentMonthDates.map(({ date, isCurrentMonth, isToday, isAvailable }, index) => (
+                                                {currentMonthDates.map(({ date, isCurrentMonth, isToday, isAvailable, isBooked }, index) => (
                                                   <div
                                                     key={index}
                                                     className={`
                                                       p-2 text-center min-h-[40px] flex items-center justify-center transition-all duration-200
                                                       ${!isCurrentMonth 
                                                         ? 'text-gray-300' 
-                                                        : isAvailable 
-                                                          ? 'bg-green-100 border border-green-300 text-green-800 rounded' 
-                                                          : 'text-gray-700 hover:bg-gray-50'
+                                                        : isBooked
+                                                          ? 'bg-red-100 border border-red-300 text-red-800 rounded'
+                                                          : isAvailable 
+                                                            ? 'bg-green-100 border border-green-300 text-green-800 rounded' 
+                                                            : 'text-gray-700 hover:bg-gray-50'
                                                       }
                                                       ${isToday ? 'ring-2 ring-blue-400 rounded' : ''}
                                                     `}
@@ -1729,8 +1769,11 @@ export default function AdminPage() {
                                                       <div className={`${isToday ? 'font-bold' : ''}`}>
                                                         {date.getDate()}
                                                       </div>
-                                                      {isAvailable && isCurrentMonth && (
+                                                      {isAvailable && isCurrentMonth && !isBooked && (
                                                         <div className="w-1 h-1 bg-green-500 rounded-full mx-auto mt-1"></div>
+                                                      )}
+                                                      {isBooked && isCurrentMonth && (
+                                                        <div className="w-1 h-1 bg-red-500 rounded-full mx-auto mt-1"></div>
                                                       )}
                                                     </div>
                                                   </div>
@@ -1755,16 +1798,18 @@ export default function AdminPage() {
                                                 ))}
 
                                                 {/* Calendar Dates */}
-                                                {nextMonthDates.map(({ date, isCurrentMonth, isToday, isAvailable }, index) => (
+                                                {nextMonthDates.map(({ date, isCurrentMonth, isToday, isAvailable, isBooked }, index) => (
                                                   <div
                                                     key={index}
                                                     className={`
                                                       p-2 text-center min-h-[40px] flex items-center justify-center transition-all duration-200
                                                       ${!isCurrentMonth 
                                                         ? 'text-gray-300' 
-                                                        : isAvailable 
-                                                          ? 'bg-green-100 border border-green-300 text-green-800 rounded' 
-                                                          : 'text-gray-700 hover:bg-gray-50'
+                                                        : isBooked
+                                                          ? 'bg-red-100 border border-red-300 text-red-800 rounded'
+                                                          : isAvailable 
+                                                            ? 'bg-green-100 border border-green-300 text-green-800 rounded' 
+                                                            : 'text-gray-700 hover:bg-gray-50'
                                                       }
                                                       ${isToday ? 'ring-2 ring-blue-400 rounded' : ''}
                                                     `}
@@ -1773,8 +1818,11 @@ export default function AdminPage() {
                                                       <div className={`${isToday ? 'font-bold' : ''}`}>
                                                         {date.getDate()}
                                                       </div>
-                                                      {isAvailable && isCurrentMonth && (
+                                                      {isAvailable && isCurrentMonth && !isBooked && (
                                                         <div className="w-1 h-1 bg-green-500 rounded-full mx-auto mt-1"></div>
+                                                      )}
+                                                      {isBooked && isCurrentMonth && (
+                                                        <div className="w-1 h-1 bg-red-500 rounded-full mx-auto mt-1"></div>
                                                       )}
                                                     </div>
                                                   </div>
@@ -1788,6 +1836,10 @@ export default function AdminPage() {
                                             <div className="flex items-center gap-2">
                                               <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
                                               <span className="text-sm text-gray-600">Available</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-4 h-4 bg-red-100 border border-red-300 rounded"></div>
+                                              <span className="text-sm text-gray-600">Booked</span>
                                             </div>
                                             <div className="flex items-center gap-2">
                                               <div className="w-4 h-4 bg-white border border-gray-200 rounded"></div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
+import { Switch } from './ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -86,6 +87,9 @@ export default function BookableCalendar({
 
   const [showBookingDialog, setShowBookingDialog] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>('');
+  const [multiDayMode, setMultiDayMode] = useState(false);
+  const [rangeStart, setRangeStart] = useState<string>('');
+  const [rangeEnd, setRangeEnd] = useState<string>('');
   const [bookingData, setBookingData] = useState<BookingData>({
     date: '',
     clientName: '',
@@ -99,6 +103,7 @@ export default function BookableCalendar({
   // Initialize availability from props
   useEffect(() => {
     if (initialAvailability) {
+      console.log('BookableCalendar: Received initialAvailability:', initialAvailability);
       setAvailability(initialAvailability);
     }
   }, [initialAvailability]);
@@ -133,22 +138,84 @@ export default function BookableCalendar({
 
   // Check if date is available
   const isDateAvailable = (date: string) => {
-    const availableDate = availability.schedule.find(d => d.date === date);
-    return availableDate?.isAvailable || false;
+    console.log('Checking availability for date:', date);
+    console.log('Available dates:', availability.schedule);
+    
+    // Try to find the date in the schedule
+    let availableDate = availability.schedule.find(d => d.date === date);
+    
+    // If not found, try to find by parsing the date differently
+    if (!availableDate) {
+      availableDate = availability.schedule.find(d => {
+        const scheduleDate = new Date(d.date);
+        const checkDate = new Date(date);
+        return scheduleDate.toDateString() === checkDate.toDateString();
+      });
+    }
+    
+    const isAvailable = availableDate?.isAvailable || false;
+    console.log('Date available:', isAvailable, 'Found date:', availableDate);
+    return isAvailable;
   };
 
   // Check if date is booked
   const [bookedDates, setBookedDates] = useState<string[]>([]);
+
+  const isWithinRange = (dateStr: string) => {
+    if (!multiDayMode || !rangeStart || !rangeEnd) return false;
+    const d = new Date(dateStr);
+    const s = new Date(rangeStart);
+    const e = new Date(rangeEnd);
+    return d >= new Date(s.getFullYear(), s.getMonth(), s.getDate()) &&
+           d <= new Date(e.getFullYear(), e.getMonth(), e.getDate());
+  };
+
+  const enumerateDates = (startStr: string, endStr: string): string[] => {
+    const s = new Date(startStr);
+    const e = new Date(endStr);
+    const out: string[] = [];
+    if (isNaN(s.getTime()) || isNaN(e.getTime())) return out;
+    for (
+      let d = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+      d <= new Date(e.getFullYear(), e.getMonth(), e.getDate());
+      d.setDate(d.getDate() + 1)
+    ) {
+      out.push(formatDateUTC7(d));
+    }
+    return out;
+  };
   
-  // Fetch booked dates for this provider
+  // Fetch booked dates for this provider (uses provider calendar cache)
   useEffect(() => {
     const fetchBookedDates = async () => {
+      try {
+        const calRes = await fetch(`/api/provider-calendars/${userId}`);
+        if (calRes.ok) {
+          const calendar = await calRes.json();
+          const unavailable = Array.isArray(calendar?.unavailableDates) ? calendar.unavailableDates : [];
+          setBookedDates(unavailable);
+          console.log('Fetched unavailable dates (cache):', unavailable);
+          return;
+        }
+      } catch (err) {
+        console.warn('Provider calendar fetch failed, falling back to bookings endpoint');
+      }
+      // Fallback: query bookings and derive booked dates
       try {
         const response = await fetch(`/api/bookings/provider/${userId}`);
         if (response.ok) {
           const bookings = await response.json();
-          const booked = bookings.map((booking: any) => booking.date);
-          setBookedDates(booked);
+          const dates: string[] = [];
+          bookings.forEach((b: any) => {
+            if (Array.isArray(b.dateRange)) {
+              b.dateRange.forEach((d: string) => dates.push(d));
+            } else if (b.date) {
+              dates.push(b.date);
+            }
+          });
+          const unique = Array.from(new Set(dates));
+          setBookedDates(unique);
+          console.log('Fetched booked dates (fallback):', unique);
         }
       } catch (error) {
         console.error('Error fetching booked dates:', error);
@@ -164,10 +231,42 @@ export default function BookableCalendar({
 
   // Handle date click for booking
   const handleDateClick = (dateStr: string) => {
-    if (!isDateAvailable(dateStr) || isDateBooked(dateStr)) return;
-    
-    setSelectedDate(dateStr);
-    setBookingData(prev => ({ ...prev, date: dateStr }));
+    if (!isDateAvailable(dateStr) || isDateBooked(dateStr)) {
+      return;
+    }
+    if (!multiDayMode) {
+      setSelectedDate(dateStr);
+      setBookingData(prev => ({ ...prev, date: dateStr }));
+      setShowBookingDialog(true);
+      return;
+    }
+    // Multi-day selection logic (range)
+    if (!rangeStart || (rangeStart && rangeEnd)) {
+      // Start a new range
+      setRangeStart(dateStr);
+      setRangeEnd('');
+      setSelectedDate(dateStr);
+      return;
+    }
+    // We have a start but no end yet
+    const start = new Date(rangeStart);
+    const end = new Date(dateStr);
+    if (end < start) {
+      // If clicked before start, reset start
+      setRangeStart(dateStr);
+      setRangeEnd('');
+      setSelectedDate(dateStr);
+      return;
+    }
+    // Validate that all dates in the range are selectable
+    const days = enumerateDates(rangeStart, dateStr);
+    const hasBlocked = days.some(d => !isDateAvailable(d) || isDateBooked(d));
+    if (hasBlocked) {
+      // Keep start, ignore invalid end
+      return;
+    }
+    setRangeEnd(dateStr);
+    setSelectedDate(rangeStart + ' → ' + dateStr);
     setShowBookingDialog(true);
   };
 
@@ -194,19 +293,27 @@ export default function BookableCalendar({
           providerId: userId,
           providerName,
           pricePerDay: parseInt(pricePerDay),
-          status: 'pending'
+          status: 'pending',
+          ...(multiDayMode && rangeStart && rangeEnd
+            ? { dateRange: [rangeStart, rangeEnd] }
+            : { date: bookingData.date })
         }),
       });
 
       if (response.ok) {
         const booking = await response.json();
         
-        // Update booked dates
-        setBookedDates(prev => [...prev, bookingData.date]);
+        // Update booked dates locally (or refresh cache)
+        if (multiDayMode && rangeStart && rangeEnd) {
+          const days = enumerateDates(rangeStart, rangeEnd);
+          setBookedDates(prev => Array.from(new Set([...prev, ...days])));
+        } else if (bookingData.date) {
+          setBookedDates(prev => [...prev, bookingData.date]);
+        }
         
         toast({
           title: "Booking Berhasil!",
-          description: "Permintaan booking Anda telah terkirim. Kami akan menghubungi Anda segera.",
+          description: multiDayMode ? "Permintaan booking multi-hari telah terkirim." : "Permintaan booking Anda telah terkirim.",
         });
 
         // Reset form and close dialog
@@ -220,6 +327,23 @@ export default function BookableCalendar({
         });
         setShowBookingDialog(false);
         setSelectedDate('');
+        setRangeStart('');
+        setRangeEnd('');
+      } else if (response.status === 409) {
+        toast({
+          title: "Tanggal tidak tersedia",
+          description: "Tanggal yang dipilih baru saja dibooking. Silakan pilih tanggal lain.",
+          variant: "destructive"
+        });
+        // Refresh booked dates from cache
+        try {
+          const calRes = await fetch(`/api/provider-calendars/${userId}`);
+          if (calRes.ok) {
+            const calendar = await calRes.json();
+            const unavailable = Array.isArray(calendar?.unavailableDates) ? calendar.unavailableDates : [];
+            setBookedDates(unavailable);
+          }
+        } catch {}
       } else {
         throw new Error('Failed to create booking');
       }
@@ -264,6 +388,10 @@ export default function BookableCalendar({
             Bulan Depan →
           </Button>
         </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">Booking Multi-hari</span>
+          <Switch checked={multiDayMode} onCheckedChange={setMultiDayMode} />
+        </div>
       </div>
 
       <p className="text-sm text-gray-600 mb-4">
@@ -296,6 +424,9 @@ export default function BookableCalendar({
             const dateStr = formatDateUTC7(date);
             const isAvailable = isDateAvailable(dateStr);
             const isBooked = isDateBooked(dateStr);
+            const inRange = isWithinRange(dateStr);
+            const isRangeStart = multiDayMode && rangeStart && dateStr === rangeStart;
+            const isRangeEnd = multiDayMode && rangeEnd && dateStr === rangeEnd;
             const isPast = date < new Date(getCurrentDateUTC7().setHours(0, 0, 0, 0));
             
             return (
@@ -309,33 +440,38 @@ export default function BookableCalendar({
                       ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
                       : isBooked
                         ? 'bg-red-100 border-red-300 text-red-700 cursor-not-allowed'
-                        : isAvailable 
-                          ? 'bg-green-100 border-green-300 text-green-800 hover:bg-green-200 cursor-pointer' 
-                          : 'bg-white border-gray-200 text-gray-400 cursor-not-allowed'
+                        : inRange || isRangeStart || isRangeEnd
+                          ? 'bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200 cursor-pointer'
+                          : isAvailable 
+                            ? 'bg-green-100 border-green-300 text-green-800 hover:bg-green-200 cursor-pointer' 
+                            : 'bg-white border-gray-200 text-gray-400 cursor-not-allowed'
                   }
                   ${isToday ? 'ring-2 ring-blue-400' : ''}
                 `}
                 onClick={() => 
-                  isCurrentMonth && !isPast && isAvailable && !isBooked && handleDateClick(dateStr)
+                  isCurrentMonth && !isPast && (isAvailable || (multiDayMode && !isBooked)) && !isBooked && handleDateClick(dateStr)
                 }
-                disabled={!isCurrentMonth || isPast || !isAvailable || isBooked}
+                disabled={!isCurrentMonth || isPast || isBooked || (!isAvailable && !multiDayMode)}
                 title={
                   isBooked 
                     ? 'Sudah dibooking' 
-                    : isAvailable 
-                      ? 'Tersedia - Klik untuk booking'
-                      : 'Tidak tersedia'
+                    : multiDayMode
+                      ? (isAvailable ? 'Klik untuk memilih rentang tanggal' : 'Tidak tersedia')
+                      : (isAvailable ? 'Tersedia - Klik untuk booking' : 'Tidak tersedia')
                 }
               >
                 <div className="text-center">
                   <div className={`${isToday ? 'font-bold' : ''}`}>
                     {date.getDate()}
                   </div>
-                  {isAvailable && !isBooked && (
+                  {isAvailable && !isBooked && !inRange && !isRangeStart && !isRangeEnd && (
                     <div className="w-2 h-2 bg-green-500 rounded-full mx-auto mt-1"></div>
                   )}
                   {isBooked && (
                     <div className="w-2 h-2 bg-red-500 rounded-full mx-auto mt-1"></div>
+                  )}
+                  {(inRange || isRangeStart || isRangeEnd) && !isBooked && (
+                    <div className="w-2 h-2 bg-blue-500 rounded-full mx-auto mt-1"></div>
                   )}
                 </div>
               </button>
@@ -371,20 +507,28 @@ export default function BookableCalendar({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              Book {providerName}
+              {multiDayMode ? `Book ${providerName} (Multi-hari)` : `Book ${providerName}`}
             </DialogTitle>
             <DialogDescription>
-              Isi form di bawah untuk booking tanggal {selectedDate && (() => {
-                // Parse the date correctly using UTC+7
-                const parsedDate = parseDateUTC7(selectedDate);
-                return parsedDate.toLocaleDateString('id-ID', { 
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                  timeZone: 'Asia/Jakarta'
-                });
-              })()}
+              {multiDayMode ? (
+                <>
+                  Pilih rentang tanggal: {rangeStart} → {rangeEnd} ({(() => {
+                    const days = rangeStart && rangeEnd ? enumerateDates(rangeStart, rangeEnd).length : 0;
+                    return `${days} hari`;
+                  })()})
+                </>
+              ) : (
+                <>Isi form di bawah untuk booking tanggal {selectedDate && (() => {
+                  const parsedDate = parseDateUTC7(selectedDate);
+                  return parsedDate.toLocaleDateString('id-ID', { 
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    timeZone: 'Asia/Jakarta'
+                  });
+                })()}</>
+              )}
             </DialogDescription>
           </DialogHeader>
           
@@ -393,9 +537,19 @@ export default function BookableCalendar({
             <div className="bg-blue-50 p-4 rounded-lg flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <DollarSign className="h-5 w-5 text-blue-600" />
-                <span className="font-medium">Harga per hari:</span>
+                <span className="font-medium">{multiDayMode && rangeStart && rangeEnd ? 'Total Harga:' : 'Harga per hari:'}</span>
               </div>
-              <span className="text-xl font-bold text-blue-600">Rp {parseInt(pricePerDay).toLocaleString()}</span>
+              <span className="text-xl font-bold text-blue-600">
+                {multiDayMode && rangeStart && rangeEnd ? (
+                  (() => {
+                    const days = enumerateDates(rangeStart, rangeEnd).length || 1;
+                    const total = (parseInt(pricePerDay) || 0) * days;
+                    return `Rp ${total.toLocaleString()} (${days} hari)`;
+                  })()
+                ) : (
+                  `Rp ${parseInt(pricePerDay).toLocaleString()}`
+                )}
+              </span>
             </div>
 
             {/* Client Information */}
@@ -439,11 +593,9 @@ export default function BookableCalendar({
                   onChange={(e) => setBookingData(prev => ({ ...prev, serviceType: e.target.value }))}
                   className="w-full p-2 border border-gray-300 rounded-md"
                 >
-                  <option value="translation">Translation</option>
+                  <option value="translation">Translator</option>
                   <option value="tour_guide">Tour Guide</option>
-                  <option value="business_interpreter">Business Interpreter</option>
-                  <option value="document_translation">Document Translation</option>
-                  <option value="medical_companion">Medical Companion</option>
+            
                 </select>
               </div>
 

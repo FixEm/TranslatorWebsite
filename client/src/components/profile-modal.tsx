@@ -2,8 +2,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { MapPin, Star, CheckCircle, MessageSquare } from "lucide-react";
+import { MapPin, Star, CheckCircle, GraduationCap, Clock, Calendar } from "lucide-react";
 import { ServiceProvider } from "@shared/schema";
+import { useLocation } from "wouter";
 
 interface ProfileModalProps {
   provider: ServiceProvider | null;
@@ -12,19 +13,9 @@ interface ProfileModalProps {
 }
 
 export default function ProfileModal({ provider, isOpen, onClose }: ProfileModalProps) {
+  const [, setLocation] = useLocation();
+  
   if (!provider) return null;
-
-  const getServiceLabel = (service: string) => {
-    const labels: { [key: string]: string } = {
-      translator: "Penerjemah Bisnis",
-      tour_guide: "Tour Guide",
-      business_interpreter: "Interpretasi",
-      document_translation: "Terjemahan Dokumen",
-      medical_companion: "Pendamping Medis",
-      education_consultant: "Konsultan Pendidikan"
-    };
-    return labels[service] || service;
-  };
 
   const getLanguageLevel = (level: string) => {
     const levels: { [key: string]: { color: string; label: string } } = {
@@ -37,90 +28,118 @@ export default function ProfileModal({ provider, isOpen, onClose }: ProfileModal
     return levels[level] || { color: "bg-gray-500", label: level };
   };
 
-  const handleWhatsAppContact = () => {
-    const message = encodeURIComponent(`Halo ${provider.name}, saya tertarik dengan layanan Anda melalui PenerjemahChina.`);
-    window.open(`https://wa.me/${provider.whatsapp.replace(/\D/g, '')}?text=${message}`, '_blank');
+  const handleBookNow = () => {
+    // Close modal and navigate to their profile page
+    onClose();
+    setLocation(`/profile/${provider.id}`);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Profil Penerjemah</DialogTitle>
+          <DialogTitle className="text-2xl font-bold text-gray-900">Profil Translator</DialogTitle>
         </DialogHeader>
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
           {/* Profile Image and Basic Info */}
           <div className="lg:col-span-1">
             <div className="text-center">
-              <img 
-                src={provider.profileImage || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=300"} 
-                alt={provider.name} 
-                className="w-32 h-32 rounded-full mx-auto mb-4 object-cover border-4 border-navy-200"
-              />
-              <h3 className="text-2xl font-bold text-navy-800 mb-2">{provider.name}</h3>
-              <div className="flex items-center justify-center mb-3">
-                <MapPin className="w-4 h-4 text-silver-500 mr-2" />
-                <span className="text-silver-600">{provider.city}, China</span>
+              {/* Profile Image Container with Verification Badge */}
+              <div className="relative inline-block mb-6">
+                <div className="relative">
+                  <img 
+                    src={provider.profileImage || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=300"} 
+                    alt={provider.name} 
+                    className="w-40 h-40 rounded-full object-cover border-4 border-gray-200 shadow-lg"
+                  />
+                  {/* Verification Badge - Top Right */}
+                  {provider.isVerified && (
+                    <div className="absolute -top-2 -right-4 bg-green-500 text-white rounded-full p-2 shadow-lg flex items-center gap-2">
+                      <CheckCircle className="w-5 h-5" />
+                      <span className="text-white text-xs">Terverifikasi</span>
+                    </div>
+                  )}
+                </div>
               </div>
+              {/* Basic Info */}
+              <h3 className="text-3xl font-bold text-gray-900 mb-3">{provider.name}</h3>
+              
+              {/* Location */}
               <div className="flex items-center justify-center mb-4">
-                <div className="flex text-yellow-400 mr-2">
+                <MapPin className="w-5 h-5 text-red-600 mr-2" />
+                <span className="text-gray-700 text-lg">{provider.city}, China</span>
+              </div>
+
+              {/* Rating */}
+              <div className="flex items-center justify-center mb-6">
+                <div className="flex text-yellow-400 mr-3">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <Star 
                       key={i} 
-                      className={`w-4 h-4 ${i < Math.floor(parseFloat(provider.rating || "0")) ? "fill-current" : ""}`} 
+                      className={`w-5 h-5 ${i < Math.floor(parseFloat(provider.rating || "0")) ? "fill-current" : ""}`} 
                     />
                   ))}
                 </div>
-                <span className="text-sm text-silver-600">
+                <span className="text-gray-700 font-semibold">
                   {provider.rating} ({provider.reviewCount} ulasan)
                 </span>
               </div>
-              <div className="space-y-2">
-                {provider.isVerified && (
-                  <Badge className="bg-green-100 text-green-800 flex items-center gap-1 w-fit mx-auto">
-                    <CheckCircle className="w-3 h-3" />
-                    Terverifikasi
-                  </Badge>
-                )}
-                <div className="text-2xl font-bold text-navy-600">Rp {provider.pricePerDay}/hari</div>
-              </div>
+
+              {/* Additional Info for Students */}
+              {(provider as any).isStudent && (
+                <div className="space-y-3 text-left bg-gray-50 rounded-xl p-4 mb-6">
+                  {(provider as any).university && (
+                    <div className="flex items-center">
+                      <GraduationCap className="w-4 h-4 text-red-600 mr-2" />
+                      <span className="text-sm text-gray-700">{(provider as any).university}</span>
+                    </div>
+                  )}
+                  {(provider as any).hskLevel && (
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-red-500 rounded-full mr-2"></div>
+                      <span className="text-sm text-gray-700">HSK Level: {(provider as any).hskLevel}</span>
+                    </div>
+                  )}
+                  {(provider as any).expectedGraduation && (
+                    <div className="flex items-center">
+                      <Clock className="w-4 h-4 text-red-600 mr-2" />
+                      <span className="text-sm text-gray-700">Graduation: {(provider as any).expectedGraduation}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Book Now Button */}
+              <Button 
+                onClick={handleBookNow}
+                className="w-full bg-red-700 hover:bg-red-800 text-white py-4 text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+              >
+                <Calendar className="w-5 h-5 mr-2" />
+                Book Now
+              </Button>
             </div>
           </div>
 
           {/* Detailed Information */}
           <div className="lg:col-span-2">
-            <div className="space-y-6">
-              {/* Services */}
-              <div>
-                <h4 className="text-lg font-semibold text-navy-800 mb-3">Layanan yang Ditawarkan</h4>
-                <div className="flex flex-wrap gap-2">
-                  {(() => {
-                    if (!Array.isArray(provider.services)) return null;
-                    return (provider.services as string[]).map((service: string) => (
-                      <Badge
-                        key={service}
-                        variant="secondary"
-                        className="bg-navy-100 text-navy-800"
-                      >
-                        {getServiceLabel(service)}
-                      </Badge>
-                    ));
-                  })()}
-                </div>
-              </div>
-
+            <div className="space-y-8">
               {/* Languages */}
-              {provider.languages && Array.isArray(provider.languages) && provider.languages.length > 0 && (
+              {(provider as any).languages && Array.isArray((provider as any).languages) && (provider as any).languages.length > 0 && (
                 <div>
-                  <h4 className="text-lg font-semibold text-navy-800 mb-3">Bahasa yang Dikuasai</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    {(provider.languages as any[]).map((lang, index) => {
+                  <h4 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                    <div className="w-2 h-8 bg-red-600 rounded-full mr-3"></div>
+                    Bahasa yang Dikuasai
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    {((provider as any).languages as any[]).map((lang: any, index: number) => {
                       const levelInfo = getLanguageLevel(lang.level);
                       return (
-                        <div key={index} className="flex items-center">
-                          <span className={`w-3 h-3 ${levelInfo.color} rounded-full mr-2`}></span>
-                          {lang.language} ({levelInfo.label})
+                        <div key={index} className="flex items-center bg-gray-50 rounded-lg p-3">
+                          <span className="font-medium">{lang.language}</span>
+                          <Badge variant="outline" className="ml-auto text-xs">
+                            {levelInfo.label}
+                          </Badge>
                         </div>
                       );
                     })}
@@ -128,49 +147,39 @@ export default function ProfileModal({ provider, isOpen, onClose }: ProfileModal
                 </div>
               )}
 
-              {/* Experience */}
+              {/* Experience & Description */}
               <div>
-                <h4 className="text-lg font-semibold text-navy-800 mb-3">Pengalaman & Keahlian</h4>
-                <p className="text-gray-700 leading-relaxed">
-                  {provider.description}
-                </p>
+                <h4 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                  <div className="w-2 h-8 bg-red-600 rounded-full mr-3"></div>
+                  Pengalaman & Keahlian
+                </h4>
+                <div className="bg-gray-50 rounded-xl p-6">
+                  <p className="text-gray-700 leading-relaxed text-lg">
+                    {(provider as any).description || "Tidak ada deskripsi yang tersedia."}
+                  </p>
+                </div>
               </div>
 
               {/* Pricing Details */}
               <div>
-                <h4 className="text-lg font-semibold text-navy-800 mb-3">Detail Harga</h4>
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <div className="text-sm text-gray-600">Tarif Dasar (per hari)</div>
-                        <div className="text-lg font-semibold text-navy-600">Rp{provider.pricePerDay}</div>
+                <h4 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                  <div className="w-2 h-8 bg-red-600 rounded-full mr-3"></div>
+                  Detail Harga
+                </h4>
+                <Card className="border-0 shadow-lg">
+                  <CardContent className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="text-center p-4 bg-red-50 rounded-xl">
+                        <div className="text-sm text-gray-600 mb-2">Tarif Dasar (per hari)</div>
+                        <div className="text-2xl font-bold text-red-700">Rp{provider.pricePerDay}</div>
                       </div>
-                      <div>
-                        <div className="text-sm text-gray-600">Pengalaman</div>
-                        <div className="text-lg font-semibold text-navy-600">{provider.experience} tahun</div>
+                      <div className="text-center p-4 bg-gray-50 rounded-xl">
+                        <div className="text-sm text-gray-600 mb-2">Pengalaman</div>
+                        <div className="text-2xl font-bold text-gray-700">{provider.experience} tahun</div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
-              </div>
-
-              {/* Contact Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                <Button 
-                  onClick={handleWhatsAppContact}
-                  className="flex-1 bg-green-500 hover:bg-green-600 text-white"
-                >
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Hubungi via WhatsApp
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="flex-1 border-navy-600 text-navy-600 hover:bg-navy-600 hover:text-white"
-                >
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Kirim Pesan
-                </Button>
               </div>
             </div>
           </div>
