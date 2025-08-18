@@ -175,7 +175,7 @@ export interface FirebaseApplication {
   };
   completenessScore: number;
   studentEmail?: string;
-  intent: 'translator' | 'tour_guide' | 'both';
+  intent: 'translator' | 'tour_guide' | 'both' | 'individu' | 'travel_agency';
   yearsInChina?: number;
   adminNotes?: string; // For admin review comments
   questionnaireData?: any; // Role-specific questionnaire responses
@@ -355,7 +355,7 @@ export const insertApplicationSchema = createInsertSchema(applications).omit({
 }).extend({
   password: z.string().min(6, "Password minimal 6 karakter"),
   confirmPassword: z.string().min(6, "Konfirmasi password minimal 6 karakter"),
-  intent: z.enum(['translator', 'tour_guide', 'both']).default('translator'),
+  intent: z.enum(['translator', 'tour_guide', 'both', 'individu', 'travel_agency']).default('translator'),
   yearsInChina: z.number().optional(),
   googleId: z.string().optional(),
   studentEmail: z.string().optional(),

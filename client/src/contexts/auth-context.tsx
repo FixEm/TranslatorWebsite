@@ -4,7 +4,7 @@ interface User {
   uid: string;
   email: string;
   name: string;
-  role: 'user' | 'admin' | 'translator';
+  role: 'user' | 'admin' | 'translator' | 'client';
   emailVerified: boolean;
 }
 
@@ -29,15 +29,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Check for existing auth on mount
   useEffect(() => {
+    console.log('🔐 Auth context mounting, checking localStorage...');
     const storedToken = localStorage.getItem('authToken');
     const storedUser = localStorage.getItem('user');
+    
+    console.log('🔐 Stored values:', { 
+      hasToken: !!storedToken, 
+      hasUser: !!storedUser,
+      userData: storedUser ? JSON.parse(storedUser) : null
+    });
     
     if (storedToken && storedUser) {
       setToken(storedToken);
       setUser(JSON.parse(storedUser));
+      console.log('🔐 Restored user from localStorage');
+    } else {
+      console.log('🔐 No stored auth data found');
     }
     
     setIsLoading(false);
+    console.log('🔐 Auth context loading complete');
   }, []);
 
   const login = async (email: string, password: string) => {

@@ -378,13 +378,13 @@ export default function BookableCalendar({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={goToPreviousMonth}>
+          <Button variant="outline" size="sm" onClick={goToPreviousMonth} className='hover:bg-red-700'>
             ← Bulan Lalu
           </Button>
-          <Button variant="outline" size="sm" onClick={goToThisMonth}>
+          <Button variant="outline" size="sm" onClick={goToThisMonth} className='hover:bg-red-700'>
             Bulan Ini
           </Button>
-          <Button variant="outline" size="sm" onClick={goToNextMonth}>
+          <Button variant="outline" size="sm" onClick={goToNextMonth} className='hover:bg-red-700'>
             Bulan Depan →
           </Button>
         </div>
@@ -540,15 +540,13 @@ export default function BookableCalendar({
                 <span className="font-medium">{multiDayMode && rangeStart && rangeEnd ? 'Total Harga:' : 'Harga per hari:'}</span>
               </div>
               <span className="text-xl font-bold text-blue-600">
-                {multiDayMode && rangeStart && rangeEnd ? (
-                  (() => {
-                    const days = enumerateDates(rangeStart, rangeEnd).length || 1;
-                    const total = (parseInt(pricePerDay) || 0) * days;
-                    return `Rp ${total.toLocaleString()} (${days} hari)`;
-                  })()
-                ) : (
-                  `Rp ${parseInt(pricePerDay).toLocaleString()}`
-                )}
+                {multiDayMode && rangeStart && rangeEnd
+                  ? (() => {
+                      const days = enumerateDates(rangeStart, rangeEnd).length || 1;
+                      const total = (parseInt(pricePerDay) || 0) * days;
+                      return `Rp ${total.toLocaleString()} (${days} hari)`;
+                    })()
+                  : `Rp ${parseInt(pricePerDay).toLocaleString()} / hari`}
               </span>
             </div>
 

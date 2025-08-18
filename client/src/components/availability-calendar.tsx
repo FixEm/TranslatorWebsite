@@ -388,18 +388,18 @@ export default function AvailabilityCalendar({
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={setAllMonthAvailable}>
+              <Button variant="outline" size="sm" onClick={setAllMonthAvailable} className='hover:bg-red-700'>
                 Tandai Semua Bulan Tersedia
               </Button>
-              <Button variant="outline" size="sm" onClick={clearAllAvailability}>
+              <Button variant="outline" size="sm" onClick={clearAllAvailability} className='hover:bg-red-700'>
                 Kosongkan Kedua Bulan
               </Button>
-              <Button variant="outline" size="sm" onClick={applyRecurringPatterns}>
+              <Button variant="outline" size="sm" onClick={applyRecurringPatterns} className='hover:bg-red-700'>
                 Terapkan Pola Berulang
               </Button>
               <Dialog open={showRecurringDialog} onOpenChange={setShowRecurringDialog}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" className='hover:bg-red-700'>
                     <Plus className="h-4 w-4 mr-1" />
                     Tambah Pola Berulang
                   </Button>
@@ -445,7 +445,7 @@ export default function AvailabilityCalendar({
               </Dialog>
               <Dialog open={showUnavailableDialog} onOpenChange={setShowUnavailableDialog}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" className='hover:bg-red-700'>
                     <AlertCircle className="h-4 w-4 mr-1" />
                     Tandai Tidak Tersedia
                   </Button>
@@ -516,13 +516,13 @@ export default function AvailabilityCalendar({
               Kalender Ketersediaan
             </CardTitle>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={goToPreviousMonth}>
+              <Button variant="outline" size="sm" onClick={goToPreviousMonth} className='hover:bg-red-700'>
                 ← Bulan Lalu
               </Button>
-              <Button variant="outline" size="sm" onClick={goToThisMonth}>
+              <Button variant="outline" size="sm" onClick={goToThisMonth} className='hover:bg-red-700'>
                 Bulan Ini
               </Button>
-              <Button variant="outline" size="sm" onClick={goToNextMonth}>
+              <Button variant="outline" size="sm" onClick={goToNextMonth} className='hover:bg-red-700'  >
                 Bulan Depan →
               </Button>
             </div>
@@ -802,7 +802,7 @@ export default function AvailabilityCalendar({
       {/* Save Button */}
       {!readOnly && (
         <div className="flex justify-end">
-          <Button onClick={saveAvailability} className="px-8">
+          <Button onClick={saveAvailability} className="px-8 bg-red-700 hover:bg-red-800">
             <Save className="h-4 w-4 mr-2" />
             Simpan Ketersediaan
           </Button>

@@ -10,15 +10,17 @@ import { Calendar, User, Phone, Mail, MessageSquare, Clock, CheckCircle, XCircle
 
 interface Booking {
   id: string;
-  date: string;
+  date?: string; // single-day
+  dateRange?: string[]; // multi-day support
   clientName: string;
   clientEmail: string;
   clientPhone: string;
   message: string;
   serviceType: string;
   pricePerDay: number;
+  totalPrice?: number;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
-  createdAt: string;
+  createdAt: any;
   adminNotes?: string;
 }
 
@@ -28,32 +30,62 @@ interface StudentBookingsManagementProps {
 }
 
 // Helper function to parse date string and convert to UTC+7
-const parseDateUTC7 = (dateStr: string) => {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  // Create date in local timezone to avoid offset issues
-  return new Date(year, month - 1, day); // month is 0-indexed
+const parseDateUTC7 = (dateStr?: string) => {
+  if (!dateStr || typeof dateStr !== 'string') return new Date('Invalid');
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return new Date('Invalid');
+  const [year, month, day] = parts.map(Number);
+  if (!year || !month || !day) return new Date('Invalid');
+  return new Date(year, month - 1, day);
 };
 
 export default function StudentBookingsManagement({ userId, providerName }: StudentBookingsManagementProps) {
   const { toast } = useToast();
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [calendarBookings, setCalendarBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [responseMessage, setResponseMessage] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
 
+  const normalizePhone = (phone: string) => (phone || '').replace(/[^0-9]/g, '');
+  const openChat = (b: Booking) => {
+    const digits = normalizePhone(b.clientPhone || '');
+    const when = (() => {
+      if (Array.isArray((b as any).dateRange) && (b as any).dateRange.length) {
+        return `${(b as any).dateRange[0]} → ${(b as any).dateRange[(b as any).dateRange.length - 1]}`;
+      }
+      return b.date || '';
+    })();
+    const text = encodeURIComponent(`Halo ${b.clientName}, saya ${providerName}. Terkait booking Anda pada ${when}.`);
+    if (digits) {
+      window.open(`https://wa.me/${digits}?text=${text}`, '_blank');
+    } else if (b.clientEmail) {
+      window.location.href = `mailto:${b.clientEmail}?subject=Booking&body=${text}`;
+    }
+  };
+
   // Fetch bookings for this student
   useEffect(() => {
     const fetchBookings = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`/api/bookings/provider/${userId}`);
-        if (response.ok) {
-          const bookingsData = await response.json();
-          setBookings(bookingsData);
+        // List: pending only
+        const [pendingRes, allRes] = await Promise.all([
+          fetch(`/api/bookings?status=pending&providerId=${userId}`),
+          fetch(`/api/bookings?providerId=${userId}`)
+        ]);
+        if (pendingRes.ok) {
+          const pendingData = await pendingRes.json();
+          setBookings(pendingData);
         } else {
           console.error('Failed to fetch bookings');
+        }
+        // Calendar: show both pending and confirmed
+        if (allRes.ok) {
+          const allData = await allRes.json();
+          setCalendarBookings(allData);
         }
       } catch (error) {
         console.error('Error fetching bookings:', error);
@@ -194,7 +226,7 @@ export default function StudentBookingsManagement({ userId, providerName }: Stud
             Calendar Overview
           </h3>
           <BookingCalendarView 
-            bookings={bookings}
+            bookings={calendarBookings}
             userId={userId}
           />
         </CardContent>
@@ -213,9 +245,17 @@ export default function StudentBookingsManagement({ userId, providerName }: Stud
                         {getStatusIcon(booking.status)}
                         <h3 className="text-lg font-semibold text-navy-800">
                           {(() => {
-                            // Parse date using UTC+7
+                            if (booking.dateRange && Array.isArray(booking.dateRange) && booking.dateRange.length > 0) {
+                              const start = parseDateUTC7(booking.dateRange[0]);
+                              const end = parseDateUTC7(booking.dateRange[booking.dateRange.length - 1]);
+                              if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                                const startStr = start.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' });
+                                const endStr = end.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' });
+                                return `${startStr} → ${endStr}`;
+                              }
+                            }
                             const parsedDate = parseDateUTC7(booking.date);
-                            return parsedDate.toLocaleDateString('id-ID', {
+                            return isNaN(parsedDate.getTime()) ? 'Tanggal tidak valid' : parsedDate.toLocaleDateString('id-ID', {
                               weekday: 'long',
                               year: 'numeric',
                               month: 'long',
@@ -256,13 +296,26 @@ export default function StudentBookingsManagement({ userId, providerName }: Stud
 
                     <div className="flex items-center justify-between">
                       <div className="text-lg font-bold text-navy-600">
-                        {formatCurrency(booking.pricePerDay)}
+                        {(() => {
+                          const days = Array.isArray(booking.dateRange) && booking.dateRange.length > 0
+                            ? booking.dateRange.length
+                            : 1;
+                          const total = typeof booking.totalPrice === 'number' 
+                            ? booking.totalPrice 
+                            : (booking.pricePerDay || 0) * days;
+                          return `${formatCurrency(total)}${days > 1 ? ` (${days} hari)` : ''}`;
+                        })()}
                       </div>
                       <div className="text-sm text-gray-500">
                         Dipesan: {(() => {
                           try {
-                            // Parse the createdAt timestamp properly
-                            const createdAt = new Date(booking.createdAt);
+                            // Parse the createdAt timestamp properly (Date | string | Firestore Timestamp)
+                            let createdAt: Date;
+                            if (booking.createdAt && typeof booking.createdAt === 'object' && (booking.createdAt as any)._seconds) {
+                              createdAt = new Date((booking.createdAt as any)._seconds * 1000);
+                            } else {
+                              createdAt = new Date(booking.createdAt);
+                            }
                             
                             // Check if it's a valid date
                             if (isNaN(createdAt.getTime())) {
@@ -306,12 +359,11 @@ export default function StudentBookingsManagement({ userId, providerName }: Stud
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        setSelectedBooking(booking);
-                        setShowDetailsDialog(true);
-                      }}
+                      onClick={() => openChat(booking)}
+                      className='hover:bg-red-700'
                     >
-                      Detail & Respon
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Chat
                     </Button>
                     
                     {booking.status === 'pending' && (

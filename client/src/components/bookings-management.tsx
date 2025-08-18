@@ -25,7 +25,8 @@ import {
 
 interface Booking {
   id: string;
-  date: string;
+  date?: string;
+  dateRange?: string[];
   providerId: string;
   providerName: string;
   clientName: string;
@@ -130,6 +131,15 @@ export default function BookingsManagement() {
 
   const formatDate = (date: any) => {
     try {
+      if (Array.isArray(date)) {
+        const start = date[0];
+        const end = date[date.length - 1] || date[0];
+        const s = new Date(start);
+        const e = new Date(end);
+        if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
+          return `${s.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} → ${e.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+        }
+      }
       let dateObj: Date;
       
       if (date instanceof Date) {
@@ -360,7 +370,7 @@ export default function BookingsManagement() {
                       <td className="p-3">
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-gray-400" />
-                          {formatDate(booking.date)}
+                          {formatDate((booking as any).dateRange || booking.date)}
                         </div>
                       </td>
                       <td className="p-3">
@@ -378,7 +388,13 @@ export default function BookingsManagement() {
                       <td className="p-3">
                         <div className="flex items-center gap-1">
                           <DollarSign className="h-4 w-4 text-gray-400" />
-                          Rp {booking.pricePerDay?.toLocaleString() || 0}
+                          {(() => {
+                            const days = Array.isArray((booking as any).dateRange) && (booking as any).dateRange.length > 0
+                              ? (booking as any).dateRange.length
+                              : 1;
+                            const total = (booking as any).totalPrice ?? (booking.pricePerDay || 0) * days;
+                            return `Rp ${Number(total).toLocaleString()}`;
+                          })()}
                         </div>
                       </td>
                       <td className="p-3">
@@ -429,7 +445,7 @@ export default function BookingsManagement() {
                   <Label className="text-sm font-medium text-gray-600">Booking Date</Label>
                   <div className="flex items-center gap-2 mt-1">
                     <Calendar className="h-4 w-4 text-gray-400" />
-                    <span className="font-medium">{formatDate(selectedBooking.date)}</span>
+                    <span className="font-medium">{formatDate((selectedBooking as any).dateRange || selectedBooking.date)}</span>
                   </div>
                 </div>
                 

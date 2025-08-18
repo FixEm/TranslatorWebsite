@@ -484,6 +484,61 @@ router.post('/applications/:id/upload/student-id', upload.single('studentId'), a
   }
 });
 
+// Upload KTP document for clients
+router.post('/applications/:id/upload/ktp', upload.single('ktp'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const file = req.file;
+    
+    if (!file) {
+      return res.status(400).json({ error: 'Tidak ada file yang diunggah' });
+    }
+    
+    // Upload to Firebase Storage using Admin SDK
+    console.log('📄 Starting KTP upload for application:', id);
+    const fileName = `ktp-documents/${id}-${Date.now()}-${file.originalname}`;
+    
+    let downloadURL: string;
+    try {
+      const bucket = firebaseStorage.bucket();
+      console.log('✅ Firebase bucket acquired:', bucket.name);
+      
+      const fileRef = bucket.file(fileName);
+      
+      await fileRef.save(file.buffer, {
+        metadata: {
+          contentType: file.mimetype,
+        },
+      });
+      console.log('✅ KTP file saved to storage');
+      
+      // Make the file publicly accessible
+      await fileRef.makePublic();
+      console.log('✅ KTP file made public');
+      
+      downloadURL = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+      console.log('✅ KTP download URL generated:', downloadURL);
+    } catch (storageError) {
+      console.error('❌ Firebase Storage error for KTP:', storageError);
+      throw storageError;
+    }
+    
+    // Update application with KTP document using the proper method
+    await storage.updateKtpDocument(id, downloadURL);
+    
+    res.json({
+      success: true,
+      message: 'Dokumen KTP berhasil diunggah',
+      documentUrl: downloadURL
+    });
+  } catch (error) {
+    console.error('Error uploading KTP:', error);
+    res.status(500).json({ error: 'Gagal mengunggah dokumen KTP' });
+  }
+});
+
+
+
 // Upload HSK certificate
 router.post('/applications/:id/upload/hsk', upload.single('hskCertificate'), async (req, res) => {
   try {

@@ -70,9 +70,9 @@ export default function Header() {
             {user ? (
               // Logged in user navigation
               <div className="flex items-center space-x-6">
-                <Link href="/translator/dashboard">
+                <Link href={user.role === 'client' ? '/client/dashboard' : '/translator/dashboard'}>
                   <span className={`font-semibold transition-all duration-200 hover:scale-105 ${
-                    isActive("/translator/dashboard") ? "text-red-700" : "text-slate-700 hover:text-red-700"
+                    (user.role === 'client' ? isActive('/client/dashboard') : isActive('/translator/dashboard')) ? "text-red-700" : "text-slate-700 hover:text-red-700"
                   }`}>
                     Dashboard
                   </span>
@@ -109,7 +109,7 @@ export default function Header() {
                     <DropdownMenuSeparator />
                     
                     <DropdownMenuItem asChild>
-                      <Link href="/translator/dashboard" className="flex items-center space-x-2">
+                      <Link href={user.role === 'client' ? '/client/dashboard' : '/translator/dashboard'} className="flex items-center space-x-2">
                         <Briefcase className="h-4 w-4" />
                         <span>Workspace</span>
                       </Link>
@@ -139,6 +139,11 @@ export default function Header() {
                 <Link href="/login">
                   <Button variant="ghost" className="text-red-700 hover:text-red-700 hover:bg-red-50 font-semibold">
                     Masuk
+                  </Button>
+                </Link>
+                <Link href="/client/signup">
+                  <Button variant="outline" className="border-red-700 text-red-700 hover:bg-red-50">
+                    Daftar Sebagai Klien
                   </Button>
                 </Link>
                 <Link href="/translator/signup">
