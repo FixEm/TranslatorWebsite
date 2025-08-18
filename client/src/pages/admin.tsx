@@ -44,10 +44,11 @@ import { Application } from "@shared/schema";
 
 const SIDEBAR_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: BarChart3 },
+  { key: "student-pool", label: "Student Pool", icon: Users },
   { key: "recruitment", label: "Recruitment", icon: Handshake },
   { key: "verified-users", label: "Verified Users", icon: UserCheck },
-  { key: "student-pool", label: "Student Pool", icon: Users },
   { key: "job-management", label: "Student Showcase", icon: Briefcase },
+  { key: "clients", label: "Clients", icon: Users }
 ];
 
 export default function AdminPage() {
@@ -56,33 +57,14 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [selectedClient, setSelectedClient] = useState<any>(null);
   const [bookedDates, setBookedDates] = useState<string[]>([]);
-
-  // Fetch booked/unavailable dates for selected student (pending + confirmed)
-  useEffect(() => {
-    const fetchBooked = async () => {
-      try {
-        if (!selectedStudent?.id) {
-          setBookedDates([]);
-          return;
-        }
-        const resp = await fetch(`/api/provider-calendars/${selectedStudent.id}`);
-        if (resp.ok) {
-          const calendar = await resp.json();
-          const dates = Array.isArray(calendar?.unavailableDates) ? calendar.unavailableDates : [];
-          setBookedDates(dates);
-        } else {
-          setBookedDates([]);
-        }
-      } catch {
-        setBookedDates([]);
-      }
-    };
-    fetchBooked();
-  }, [selectedStudent?.id]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [clientSearchQuery, setClientSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [clientStatusFilter, setClientStatusFilter] = useState("all");
   const [studentTypeFilter, setStudentTypeFilter] = useState("all");  // New state for student type filtering
+  const [clientTypeFilter, setClientTypeFilter] = useState("all");
   const [showVerifiedUsers, setShowVerifiedUsers] = useState(false);
   const [interviewModalOpen, setInterviewModalOpen] = useState(false);
   const [requestChangesModalOpen, setRequestChangesModalOpen] = useState(false);
@@ -92,7 +74,9 @@ export default function AdminPage() {
   const [interviewDateTime, setInterviewDateTime] = useState("");
   const [interviewTime, setInterviewTime] = useState("");
   const [meetLink, setMeetLink] = useState("");
-  const [selectedProject, setSelectedProject] = useState("");	// Fetch dashboard stats
+  const [selectedProject, setSelectedProject] = useState("");
+
+	// Fetch dashboard stats
 	const { data: stats } = useQuery<{
 		totalTranslators: number;
 		verifiedTranslators: number;
@@ -133,6 +117,85 @@ export default function AdminPage() {
 		},
 	});
 
+	// Helper function to format dates
+	const formatDate = (date: Date | string | number | null | undefined | any) => {
+		if (!date) return "-";
+		
+		try {
+			let dateObj: Date;
+			
+			if (date instanceof Date) {
+				dateObj = date;
+			} else if (typeof date === 'string') {
+				dateObj = new Date(date);
+			} else if (typeof date === 'number') {
+				// Handle Unix timestamp (seconds or milliseconds)
+				dateObj = new Date(date > 1000000000000 ? date : date * 1000);
+			} else if (typeof date === 'object' && date._seconds) {
+				// Handle Firestore timestamp object
+				dateObj = new Date(date._seconds * 1000);
+			} else {
+				return "-";
+			}
+			
+			if (isNaN(dateObj.getTime())) return "-";
+			
+			return new Intl.DateTimeFormat("id-ID", {
+				year: "numeric",
+				month: "short",
+				day: "numeric",
+			}).format(dateObj);
+		} catch (error) {
+			console.error('Date formatting error:', error, 'Input:', date);
+			return "-";
+		}
+	};
+
+  // Transform applications data for client display
+  const transformApplicationToClient = (app: Application) => {
+    console.log('🔍 Transforming client application data:', app);
+    const verificationSteps = (app as any).verificationSteps || {};
+    
+    return {
+      id: app.id,
+      name: app.name,
+      email: app.email,
+      phone: app.whatsapp,
+      city: app.city,
+      intent: (app as any).intent || 'individu',
+      status: app.status,
+      submittedAt: formatDate((app as any).createdAt || (app as any).submittedAt || new Date()),
+      ktpDocument: { 
+        status: verificationSteps.ktpStatus || "pending", 
+        url: (app as any).ktpDocument?.url || null 
+      },
+      availability: (app as any).availability || null,
+      verificationProgress: (() => {
+        if (app.status === 'rejected') return 0;
+        
+        // Calculate based on verification steps (50% for email, 50% for KTP)
+        const steps = verificationSteps || {};
+        
+        let score = 0;
+        if (steps.emailVerified) score += 50;
+        if (steps.ktpUploaded && steps.ktpStatus === 'approved') score += 50;
+        
+        // Account is only "complete" (100%) when admin approves
+        if (steps.adminApproved && app.status === 'approved') {
+          return 100;
+        }
+        
+        return Math.min(score, 99); // Cap at 99% until admin approval
+      })(),
+      // Add additional fields for debugging
+      motivation: (app as any).motivation || 'Not provided'
+    };
+  };
+
+  // Derived lists with transformation
+  const clientList = (allApplications || []).filter((app: any) => app.intent === 'individu' || app.intent === 'travel_agency').map(transformApplicationToClient);
+  const studentList = (allApplications || []).filter((app: any) => app.intent !== 'individu' && app.intent !== 'travel_agency');
+
 	// Filter applications by status
 	const pendingApplications = allApplications?.filter(app => app.status === 'pending') || [];
 	const approvedApplications = allApplications?.filter(app => app.status === 'approved') || [];
@@ -171,6 +234,11 @@ export default function AdminPage() {
 
 	const handleReject = (id: string) => {
 		updateStatusMutation.mutate({ id, status: "rejected" });
+	};
+
+	// Reuse update status for clients list
+	const updateApplicationStatus = (id: string, status: 'approved' | 'rejected' | 'pending') => {
+		updateStatusMutation.mutate({ id, status });
 	};
 
 	// Document verification mutation
@@ -230,6 +298,30 @@ export default function AdminPage() {
 				
 				setSelectedStudent(updatedStudent);
 			}
+
+			// Update the selected client in the UI immediately
+			if (selectedClient && selectedClient.id === studentId) {
+				const updatedClient = { ...selectedClient };
+				if (documentType === 'ktp') {
+					// Ensure ktpDocument exists before updating its status
+					if (!updatedClient.ktpDocument) {
+						updatedClient.ktpDocument = { status: 'pending', url: null };
+					}
+					updatedClient.ktpDocument.status = status;
+				}
+				
+				// Recalculate verification progress for clients
+				const emailVerified = true; // Assuming email is always verified at this point
+				const ktpApproved = updatedClient.ktpDocument?.status === 'approved';
+				
+				let completedSteps = 0;
+				if (emailVerified) completedSteps++;
+				if (ktpApproved) completedSteps++;
+				
+				updatedClient.verificationProgress = Math.round((completedSteps / 2) * 100);
+				
+				setSelectedClient(updatedClient);
+			}
 		},
 		onError: (error) => {
 			console.error('❌ Update failed:', error);
@@ -280,39 +372,6 @@ export default function AdminPage() {
 			});
 		},
 	});
-
-	const formatDate = (date: Date | string | number | null | undefined | any) => {
-		if (!date) return "-";
-		
-		try {
-			let dateObj: Date;
-			
-			if (date instanceof Date) {
-				dateObj = date;
-			} else if (typeof date === 'string') {
-				dateObj = new Date(date);
-			} else if (typeof date === 'number') {
-				// Handle Unix timestamp (seconds or milliseconds)
-				dateObj = new Date(date > 1000000000000 ? date : date * 1000);
-			} else if (typeof date === 'object' && date._seconds) {
-				// Handle Firestore timestamp object
-				dateObj = new Date(date._seconds * 1000);
-			} else {
-				return "-";
-			}
-			
-			if (isNaN(dateObj.getTime())) return "-";
-			
-			return new Intl.DateTimeFormat("id-ID", {
-				year: "numeric",
-				month: "short",
-				day: "numeric",
-			}).format(dateObj);
-		} catch (error) {
-			console.error('Date formatting error:', error, 'Input:', date);
-			return "-";
-		}
-	};
 
   // Helper function to safely display progress values
   const safeProgress = (progress: number | undefined | null): number => {
@@ -478,8 +537,10 @@ export default function AdminPage() {
     };
   };
 
-  // Get transformed data
-  const studentsData = allApplications?.map(transformApplicationToStudent) || [];
+  // Get transformed data (exclude clients from student pool)
+  const studentsData = (allApplications || [])
+    .filter((app: any) => app.intent !== 'individu' && app.intent !== 'travel_agency')
+    .map(transformApplicationToStudent);
   const recruitmentCandidates = approvedApplications?.map(transformApplicationToCandidate) || [];
 
   const getRecruitmentStatusBadge = (status: string) => {
@@ -548,7 +609,8 @@ export default function AdminPage() {
     const documentTypeMap: { [key: string]: string } = {
       'HSK Certificate': 'hsk',
       'Student ID Card': 'studentId',
-      'CV/Resume': 'cv'
+      'CV/Resume': 'cv',
+      'KTP Document': 'ktp'
     };
 
     const documentType = documentTypeMap[document];
@@ -2221,6 +2283,388 @@ export default function AdminPage() {
           </>
         )}
 
+        {activeTab === "clients" && (
+          <>
+            {!selectedClient ? (
+              <div className="space-y-6">
+                {/* Header */}
+                <div>
+                  <h1 className="text-3xl font-bold text-navy-800">Client Pool</h1>
+                  <p className="text-gray-600">Manage client onboarding verification</p>
+                </div>
+
+                {/* Type tabs: All / Individu / Travel Agency */}
+                <Card>
+                  <CardContent className="p-4">
+                    
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => setClientTypeFilter("all")}
+                        className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
+                          clientTypeFilter === "all" ? "bg-white text-purple-600 shadow-sm" : "text-gray-600 hover:text-gray-900"
+                        }`}
+                      >
+                        All Clients
+                      </button>
+                      <button
+                        onClick={() => setClientTypeFilter("individu")}
+                        className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
+                          clientTypeFilter === "individu" ? "bg-white text-purple-600 shadow-sm" : "text-gray-600 hover:text-gray-900"
+                        }`}
+                      >
+                        Individu
+                      </button>
+                      <button
+                        onClick={() => setClientTypeFilter("travel_agency")}
+                        className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
+                          clientTypeFilter === "travel_agency" ? "bg-white text-purple-600 shadow-sm" : "text-gray-600 hover:text-gray-900"
+                        }`}
+                      >
+                        Travel Agency
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Filters and Search */}
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <div className="flex-1 relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                        <Input
+                          placeholder="Search clients..."
+                          value={clientSearchQuery}
+                          onChange={(e) => setClientSearchQuery(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                      <Select value={clientStatusFilter} onValueChange={setClientStatusFilter}>
+                        <SelectTrigger className="w-40">
+                          <SelectValue placeholder="Filter by status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Status</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="approved">Approved</SelectItem>
+                          <SelectItem value="rejected">Rejected</SelectItem>
+                          <SelectItem value="needs_changes">Needs Changes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Clients Table */}
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {clientList
+                            .filter(c => (clientTypeFilter === 'all' || c.intent === clientTypeFilter))
+                            .filter(c => (clientStatusFilter === 'all' || c.status === clientStatusFilter))
+                            .filter(c => (c.name?.toLowerCase().includes(clientSearchQuery.toLowerCase()) || c.email?.toLowerCase().includes(clientSearchQuery.toLowerCase())))
+                            .map((c: any) => (
+                            <tr key={c.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center gap-3">
+                                  <div>
+                                    <div className="font-medium text-gray-900">{c.name}</div>
+                                    <div className="text-xs text-gray-500">{c.email}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <Badge variant="secondary" className="capitalize">{c.intent}</Badge>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <Badge className="capitalize">{c.status}</Badge>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {formatDate((c as any).createdAt || new Date())}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <div className="flex items-center gap-2">
+                                  <Button variant="outline" size="sm" onClick={() => setSelectedClient(c)}>View Details</Button>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="outline" size="sm">
+                                        <Menu className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                      <DropdownMenuItem onClick={() => updateApplicationStatus(c.id, 'approved')}>Approve</DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => updateApplicationStatus(c.id, 'rejected')}>Reject</DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => updateApplicationStatus(c.id, 'pending')}>Pending</DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => {
+                                        setSelectedCandidate(c);
+                                        setRequestChangesModalOpen(true);
+                                      }}>Request Changes</DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="flex items-center gap-4 mb-6">
+                  <Button variant="ghost" onClick={() => setSelectedClient(null)} className="flex items-center gap-2">
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Clients
+                  </Button>
+                  <div className="h-6 w-px bg-gray-300" />
+                  <h1 className="text-2xl font-bold text-navy-800">Detail Klien</h1>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Profile Info */}
+                  <div className="lg:col-span-1">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Profile</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-navy-100 rounded-full flex items-center justify-center">
+                            <Users className="h-6 w-6 text-navy-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-navy-800">{selectedClient.name}</h3>
+                            <p className="text-sm text-gray-600">{selectedClient.email}</p>
+                          </div>
+                        </div>
+                        
+                        <Separator />
+                        
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-sm font-medium text-gray-600">Client Type</label>
+                            <p className="text-sm text-navy-800 capitalize">{selectedClient.intent}</p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-600">Phone</label>
+                            <p className="text-sm text-navy-800">{selectedClient.phone || 'Not provided'}</p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-600">City</label>
+                            <p className="text-sm text-navy-800">{selectedClient.city || 'Not provided'}</p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-600">Submitted</label>
+                            <p className="text-sm text-navy-800">{selectedClient.submittedAt || 'Not available'}</p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-600">Status</label>
+                            <div className="mt-1">
+                              {getStatusBadge(selectedClient.status || 'pending')}
+                            </div>
+                          </div>
+                          {selectedClient.motivation && (
+                            <div>
+                              <label className="text-sm font-medium text-gray-600">Motivation</label>
+                              <p className="text-sm text-navy-800 bg-gray-50 p-3 rounded mt-1 max-h-32 overflow-y-auto">{selectedClient.motivation}</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Document Details */}
+                  <div className="lg:col-span-2">
+                    <Tabs defaultValue="documents" className="space-y-4">
+                      <TabsList>
+                        <TabsTrigger value="documents">General Details</TabsTrigger>
+                        <TabsTrigger value="activation">Activation</TabsTrigger>
+                      </TabsList>
+                      
+                      <TabsContent value="documents" className="space-y-4">
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="flex items-center justify-between">
+                              Document Verification
+                              <Badge 
+                                variant={
+                                  safeProgress(selectedClient.verificationProgress) === 100 ? "default" : 
+                                  safeProgress(selectedClient.verificationProgress) >= 80 ? "secondary" : "outline"
+                                }
+                                className={
+                                  safeProgress(selectedClient.verificationProgress) === 100 
+                                    ? "bg-green-100 text-green-800" 
+                                    : safeProgress(selectedClient.verificationProgress) >= 80 
+                                    ? "bg-blue-100 text-blue-800" 
+                                    : ""
+                                }
+                              >
+                                {safeProgress(selectedClient.verificationProgress) === 100 
+                                  ? "✅ Activated by Admin" 
+                                  : safeProgress(selectedClient.verificationProgress) >= 80 
+                                  ? "📋 Ready for Review" 
+                                  : `${safeProgress(selectedClient.verificationProgress)}% Complete`
+                                }
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-6">
+                            {/* KTP Document */}
+                            <div className="space-y-4 p-4 border rounded-lg">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <CreditCard className="h-8 w-8 text-green-600" />
+                                  <div>
+                                    <h4 className="font-medium">Kartu Tanda Penduduk (KTP)</h4>
+                                    <div className="flex items-center text-sm text-gray-600">
+                                      {getDocumentAvailability(selectedClient.ktpDocument?.url)}
+                                      <span>Indonesian identity card</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  {getDocumentStatus(selectedClient.ktpDocument?.status || 'pending')}
+                                  <Select
+                                    value={selectedClient.ktpDocument?.status || 'pending'}
+                                    onValueChange={(value) => updateDocumentStatus(selectedClient.id, 'KTP Document', value)}
+                                    disabled={updateDocumentMutation.isPending}
+                                  >
+                                    <SelectTrigger className="w-36">
+                                      <SelectValue placeholder="Select status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="pending">Pending</SelectItem>
+                                      <SelectItem value="approved">Approved</SelectItem>
+                                      <SelectItem value="rejected">Rejected</SelectItem>
+                                      <SelectItem value="needs_changes">Needs Changes</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => viewDocument(selectedClient.ktpDocument?.url, 'KTP Document')}
+                                    disabled={!selectedClient.ktpDocument?.url}
+                                  >
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    View
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </TabsContent>
+                      
+                      <TabsContent value="activation" className="space-y-4">
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                              <CheckCircle className="h-5 w-5" />
+                              Account Activation
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="bg-blue-50 p-4 rounded-lg">
+                              <h4 className="font-medium text-blue-900 mb-2">Activation Overview</h4>
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                  <span className="text-blue-700">Verification Progress:</span>
+                                  <span className="font-medium ml-2">{safeProgress(selectedClient.verificationProgress)}%</span>
+                                </div>
+                                <div>
+                                  <span className="text-blue-700">Status:</span>
+                                  <span className="font-medium ml-2 capitalize">{selectedClient.status}</span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Document Verification Status */}
+                            <div className="p-4 border rounded-lg">
+                              <h5 className="font-medium mb-3">Document Verification Status</h5>
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm">Email Verified:</span>
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm">KTP Document:</span>
+                                  <div className="flex items-center gap-3">
+                                    {selectedClient.ktpDocument?.url ? 
+                                      getDocumentStatus(selectedClient.ktpDocument.status) : 
+                                      <XCircle className="h-4 w-4 text-red-600" />
+                                    }
+                                   
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Verification Progress Bar */}
+                            <div className="p-4 bg-gray-50 rounded-lg">
+                              <h5 className="font-medium mb-2">Verification Progress</h5>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                                  style={{ width: `${safeProgress(selectedClient.verificationProgress)}%` }}
+                                ></div>
+                              </div>
+                              <p className="text-sm text-gray-600 mt-2">{safeProgress(selectedClient.verificationProgress)}% Complete</p>
+                            </div>
+                            
+                            <div className="flex gap-3">
+                              <Button 
+                                onClick={() => updateStatusMutation.mutate({ id: selectedClient.id, status: 'approved' })}
+                                disabled={updateStatusMutation.isPending || selectedClient.status === 'approved'}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Approve Client
+                              </Button>
+                              <Button 
+                                onClick={() => updateStatusMutation.mutate({ id: selectedClient.id, status: 'rejected' })}
+                                disabled={updateStatusMutation.isPending || selectedClient.status === 'rejected'}
+                                variant="destructive"
+                              >
+                                <XCircle className="h-4 w-4 mr-2" />
+                                Reject Client
+                              </Button>
+                              <Button 
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedCandidate(selectedClient);
+                                  setRequestChangesModalOpen(true);
+                                }}
+                                disabled={updateStatusMutation.isPending}
+                              >
+                                <AlertCircle className="h-4 w-4 mr-2" />
+                                Request Changes
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </TabsContent>
+                    </Tabs>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
         {activeTab === "job-management" && (
           <>
             <h1 className="text-3xl font-bold text-navy-800 mb-2">Job Management</h1>
@@ -2373,57 +2817,78 @@ export default function AdminPage() {
 			{/* Request Changes Modal */}
 			<Dialog open={requestChangesModalOpen} onOpenChange={setRequestChangesModalOpen}>
 				<DialogContent className="sm:max-w-md">
-					<DialogHeader>
-						<DialogTitle>Request Document Changes</DialogTitle>
-						<DialogDescription>
-							Select which documents need to be resubmitted by {selectedCandidate?.name}
-						</DialogDescription>
-					</DialogHeader>
+									<DialogHeader>
+					<DialogTitle>Request Document Changes</DialogTitle>
+					<DialogDescription>
+						Select which documents need to be resubmitted by {selectedCandidate?.name} ({selectedCandidate?.intent === 'individu' || selectedCandidate?.intent === 'travel_agency' ? 'Client' : 'Student'})
+					</DialogDescription>
+				</DialogHeader>
 					<div className="space-y-4">
 						<div className="space-y-3">
 							<Label className="text-sm font-medium">Documents requiring changes:</Label>
 							<div className="space-y-2">
+								{/* Show student-specific documents only for students */}
+								{selectedCandidate && selectedCandidate.intent !== 'individu' && selectedCandidate.intent !== 'travel_agency' && (
+									<>
+										<div className="flex items-center space-x-2">
+											<Checkbox
+												id="hsk"
+												checked={selectedChanges.includes('hsk')}
+												onCheckedChange={(checked: boolean) => {
+													if (checked) {
+														setSelectedChanges(prev => [...prev, 'hsk']);
+													} else {
+														setSelectedChanges(prev => prev.filter(item => item !== 'hsk'));
+													}
+												}}
+											/>
+											<Label htmlFor="hsk" className="text-sm">HSK Certificate</Label>
+										</div>
+										<div className="flex items-center space-x-2">
+											<Checkbox
+												id="studentId"
+												checked={selectedChanges.includes('studentId')}
+												onCheckedChange={(checked: boolean) => {
+													if (checked) {
+														setSelectedChanges(prev => [...prev, 'studentId']);
+													} else {
+														setSelectedChanges(prev => prev.filter(item => item !== 'studentId'));
+													}
+												}}
+											/>
+											<Label htmlFor="studentId" className="text-sm">Student ID Document</Label>
+										</div>
+										<div className="flex items-center space-x-2">
+											<Checkbox
+												id="cv"
+												checked={selectedChanges.includes('cv')}
+												onCheckedChange={(checked: boolean) => {
+													if (checked) {
+														setSelectedChanges(prev => [...prev, 'cv']);
+													} else {
+														setSelectedChanges(prev => prev.filter(item => item !== 'cv'));
+													}
+												}}
+											/>
+											<Label htmlFor="cv" className="text-sm">Curriculum Vitae (CV)</Label>
+										</div>
+									</>
+								)}
+								
+								{/* Show KTP document for both students and clients */}
 								<div className="flex items-center space-x-2">
 									<Checkbox
-										id="hsk"
-										checked={selectedChanges.includes('hsk')}
+										id="ktp"
+										checked={selectedChanges.includes('ktp')}
 										onCheckedChange={(checked: boolean) => {
 											if (checked) {
-												setSelectedChanges(prev => [...prev, 'hsk']);
+												setSelectedChanges(prev => [...prev, 'ktp']);
 											} else {
-												setSelectedChanges(prev => prev.filter(item => item !== 'hsk'));
+												setSelectedChanges(prev => prev.filter(item => item !== 'ktp'));
 											}
 										}}
 									/>
-									<Label htmlFor="hsk" className="text-sm">HSK Certificate</Label>
-								</div>
-								<div className="flex items-center space-x-2">
-									<Checkbox
-										id="studentId"
-										checked={selectedChanges.includes('studentId')}
-										onCheckedChange={(checked: boolean) => {
-											if (checked) {
-												setSelectedChanges(prev => [...prev, 'studentId']);
-											} else {
-												setSelectedChanges(prev => prev.filter(item => item !== 'studentId'));
-											}
-										}}
-									/>
-									<Label htmlFor="studentId" className="text-sm">Student ID Document</Label>
-								</div>
-                <div className="flex items-center space-x-2">
-									<Checkbox
-										id="cv"
-										checked={selectedChanges.includes('cv')}
-										onCheckedChange={(checked: boolean) => {
-											if (checked) {
-												setSelectedChanges(prev => [...prev, 'cv']);
-											} else {
-												setSelectedChanges(prev => prev.filter(item => item !== 'cv'));
-											}
-										}}
-									/>
-									<Label htmlFor="cv" className="text-sm">Curriculum Vitae (CV)</Label>
+									<Label htmlFor="ktp" className="text-sm">KTP Document</Label>
 								</div>
 							</div>
 						</div>

@@ -44,10 +44,14 @@ import {
   Eye,
   ChevronDown,
   Shield,
-  ArrowLeft
+  ArrowLeft,
+  Users,
+  Mail,
+  Phone
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Custom hook to track URL search parameter changes
 function useSearchParams() {
@@ -112,6 +116,8 @@ export default function TranslatorDashboard() {
   const [applicationData, setApplicationData] = useState(null);
   const [userJobs, setUserJobs] = useState<JobFromSchema[]>([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+  const [clientBookings, setClientBookings] = useState<any[]>([]);
+  const [clientsStatusFilter, setClientsStatusFilter] = useState<'confirmed' | 'cancelled' | 'all'>('confirmed');
 
   // Handle URL query parameters for tab navigation - now reactive to search params
   useEffect(() => {
@@ -122,7 +128,7 @@ export default function TranslatorDashboard() {
       // Map URL tab parameter to internal tab keys
       const tabMapping: { [key: string]: string } = {
         'profile': 'profile',
-        'workspace': 'workspace',
+        'clients': 'clients',
         'verification': 'verification',
         'availability': 'availability',
         'chat': 'chat',
@@ -290,10 +296,10 @@ export default function TranslatorDashboard() {
       isActive: activeTab === 'bookings'
     },
     {
-      title: "Workspace",
-      icon: Briefcase,
-      key: "workspace",
-      isActive: activeTab === 'workspace'
+      title: "Clients",
+      icon: Users,
+      key: "clients",
+      isActive: activeTab === 'clients'
     },
     {
       title: "Chat",
@@ -572,6 +578,132 @@ export default function TranslatorDashboard() {
     );
   };
 
+  // Fetch confirmed bookings for Clients tab
+  useEffect(() => {
+    const loadClients = async () => {
+      try {
+        const providerId = (applicationData as any)?.id || user?.uid;
+        if (!providerId) return;
+        const qs = new URLSearchParams();
+        if (clientsStatusFilter !== 'all') qs.append('status', clientsStatusFilter);
+        qs.append('providerId', providerId);
+        const resp = await fetch(`/api/bookings?${qs.toString()}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          setClientBookings(Array.isArray(data) ? data : []);
+        }
+      } catch (e) {
+        // silent
+      }
+    };
+    loadClients();
+  }, [applicationData, user?.uid, clientsStatusFilter]);
+
+  const formatClientDate = (b: any) => {
+    const tz: any = { timeZone: 'Asia/Jakarta', year: 'numeric', month: 'long', day: 'numeric' };
+    if (Array.isArray(b?.dateRange) && b.dateRange.length) {
+      const s = new Date(b.dateRange[0]);
+      const e = new Date(b.dateRange[b.dateRange.length - 1]);
+      if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
+        return `${s.toLocaleDateString('id-ID', tz)} → ${e.toLocaleDateString('id-ID', tz)}`;
+      }
+    }
+    const d = new Date(b?.date);
+    return isNaN(d.getTime()) ? 'Tanggal tidak valid' : d.toLocaleDateString('id-ID', tz);
+  };
+
+  const renderClients = () => {
+    const items = clientBookings;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-navy-800">Clients</h2>
+            <p className="text-gray-600">Daftar klien dari booking terkonfirmasi</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-500">Total: {items.length}</div>
+            <div className="w-48">
+              <Select value={clientsStatusFilter} onValueChange={(v: any) => setClientsStatusFilter(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Filter status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="confirmed">Confirmed</SelectItem>
+                  <SelectItem value="cancelled">Tertolak</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+        {items.length === 0 ? (
+          <div className="text-center py-12">
+            <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-600 mb-2">Belum ada klien</h3>
+            <p className="text-gray-500">Klien akan muncul setelah booking dikonfirmasi.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {items.map((b: any) => (
+              <Card key={b.id} className="hover:shadow-lg transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="text-sm text-gray-500">Jadwal</div>
+                      <div className="font-semibold text-navy-800">{formatClientDate(b)}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{(b.serviceType || 'Service')}</Badge>
+                      <Badge>{b.status}</Badge>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-2 text-sm text-gray-700">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-gray-400" />
+                      <span>{b.clientName || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-gray-400" />
+                      <span>{b.clientEmail || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-gray-400" />
+                      <span>{b.clientPhone || '-'}</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="text-navy-800 font-semibold">
+                      {(() => {
+                        const days = Array.isArray(b.dateRange) && b.dateRange.length ? b.dateRange.length : 1;
+                        const total = typeof b.totalPrice === 'number' ? b.totalPrice : (Number(b.pricePerDay) || 0) * days;
+                        return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(total);
+                      })()}
+                    </div>
+                    {b.status === 'confirmed' ? (
+                      <Button variant="outline" size="sm" className='hover:bg-red-700' onClick={() => {
+                        const digits = String(b.clientPhone || '').replace(/[^0-9]/g, '');
+                        const text = encodeURIComponent(`Halo ${b.clientName}, saya ${profile.name}. Terkait booking Anda.`);
+                        if (digits) {
+                          window.open(`https://wa.me/${digits}?text=${text}`, '_blank');
+                        } else if (b.clientEmail) {
+                          window.location.href = `mailto:${b.clientEmail}?subject=Booking&body=${text}`;
+                        }
+                      }}>
+                        <MessageSquare className="h-4 w-4 mr-2" />
+                        Chat
+                      </Button>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
 
 
   const renderContent = () => {
@@ -699,8 +831,8 @@ export default function TranslatorDashboard() {
             )}
           </div>
         );
-      case 'workspace':
-        return renderWorkspace();
+      case 'clients':
+        return renderClients();
       case 'chat':
         return (
           <div className="text-center py-12">
@@ -926,9 +1058,9 @@ export default function TranslatorDashboard() {
                       <SidebarMenuButton
                         isActive={item.isActive}
                         onClick={() => handleTabChange(item.key)}
-                        className={`${item.isActive ? "relative bg-red-50 text-red-700 " : ""}group hover:!bg-red-50 hover:!text-red-700 active:!bg-red-50 active:!text-red-700 data-[active=true]:!bg-red-50 data-[active=true]:!text-red-700`}
+                        className={`${item.isActive ? "relative bg-red-50 text-red-700 " : ""}group hover:!bg-red-50 hover:!text-red-700 active:!text-red-700 data-[active=true]:!bg-red-50 data-[active=true]:!text-red-700`}
                       >
-                        <item.icon className={`${item.isActive ? "h-4 w-4 text-red-600" : "h-4 w-4"} group-hover:!text-red-700 group-active:!text-red-700 data-[active=true]:!text-red-600`} />
+                        <item.icon className={`${item.isActive ? "h-4 w-4 text-red-600" : "h-4 w-4"}  group-active:!text-red-700 data-[active=true]:!text-red-600`} />
                         <span>{item.title}</span>
                         {item.isActive && (
                           <span className="absolute left-0 top-0 h-full w-1 bg-red-600 rounded-r" />

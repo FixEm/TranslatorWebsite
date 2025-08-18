@@ -3,26 +3,25 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { User, MapPin, GraduationCap, Star, Languages, Briefcase } from "lucide-react";
+import { User, MapPin, Briefcase, Phone, Shield } from "lucide-react";
 
-interface ProfileManagementProps {
+interface ClientProfileManagementProps {
   applicationData?: any;
   onUpdate?: () => void;
 }
 
-export default function ProfileManagement({ applicationData, onUpdate }: ProfileManagementProps) {
+export default function ClientProfileManagement({ applicationData, onUpdate }: ClientProfileManagementProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   
-  // Form data
+  // Form data - only editable fields for clients
   const [profileData, setProfileData] = useState({
-    description: '',
-    pricePerDay: '',
+    name: '',
+    city: '',
     whatsapp: '',
   });
 
@@ -30,8 +29,8 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
   useEffect(() => {
     if (applicationData) {
       setProfileData({
-        description: applicationData.description || '',
-        pricePerDay: applicationData.pricePerDay || '',
+        name: applicationData.name || '',
+        city: applicationData.city || '',
         whatsapp: applicationData.whatsapp || '',
       });
     }
@@ -121,8 +120,8 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
     // Reset form data to original values
     if (applicationData) {
       setProfileData({
-        description: applicationData.description || '',
-        pricePerDay: applicationData.pricePerDay || '',
+        name: applicationData.name || '',
+        city: applicationData.city || '',
         whatsapp: applicationData.whatsapp || '',
       });
     }
@@ -131,34 +130,11 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
 
   const getIntentLabel = (intent: string) => {
     switch (intent) {
-      case 'translator': return 'Translator';
-      case 'tour_guide': return 'Tour Guide';
-      case 'both': return 'Translator & Tour Guide';
+      case 'individu': return 'Individual';
+      case 'travel_agency': return 'Travel Agency';
       default: return 'Not specified';
     }
   };
-
-  const getServices = () => {
-    if (!applicationData?.services) return [];
-    return Array.isArray(applicationData.services) ? applicationData.services : [];
-  };
-
-  // Compute completeness score locally to match VerificationStatus
-  const completenessScore = (() => {
-    try {
-      const points = { emailVerified: 25, studentIdUploaded: 20, hskUploaded: 25, cvUploaded: 20, introVideoUploaded: 10 } as const;
-      const steps: any = applicationData?.verificationSteps || {};
-      let score = 0;
-      if (steps.emailVerified) score += points.emailVerified;
-      if (steps.studentIdUploaded && steps.studentIdStatus !== 'changes_requested') score += points.studentIdUploaded;
-      if (steps.hskUploaded && steps.hskStatus !== 'changes_requested') score += points.hskUploaded;
-      if (steps.cvUploaded && steps.cvStatus !== 'changes_requested') score += points.cvUploaded;
-      if (steps.introVideoUploaded) score += points.introVideoUploaded;
-      return Math.max(0, Math.min(100, score));
-    } catch {
-      return 0;
-    }
-  })();
 
   if (!applicationData) {
     return (
@@ -170,7 +146,7 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-h-screen">
       {/* Basic Profile Information */}
       <Card>
         <CardHeader>
@@ -181,7 +157,7 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
                 Profile Information
               </CardTitle>
               <CardDescription>
-                Manage your personal and professional information
+                Manage your personal information
               </CardDescription>
             </div>
             {!isEditing && (
@@ -227,61 +203,41 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
             </div>
           </div>
 
-          {/* Read-only Basic Info */}
+          {/* Editable Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-600">Name</Label>
-              <p className="text-lg font-semibold">{applicationData.name}</p>
+              <Label htmlFor="name">Name</Label>
+              {isEditing ? (
+                <Input
+                  id="name"
+                  value={profileData.name}
+                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  placeholder="Enter your name"
+                />
+              ) : (
+                <p className="text-lg font-semibold">{profileData.name}</p>
+              )}
             </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-600">Email</Label>
-              <p className="text-lg">{applicationData.email}</p>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-600">City</Label>
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-gray-500" />
-                <p className="text-lg">{applicationData.city}</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-600">Intent</Label>
-              <div className="flex items-center gap-2">
-                <Briefcase className="h-4 w-4 text-gray-500" />
-                <p className="text-lg">{getIntentLabel(applicationData.intent)}</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-600">Experience</Label>
-              <p className="text-lg">{applicationData.experience} years</p>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-600">HSK Level</Label>
-              <div className="flex items-center gap-2">
-                <GraduationCap className="h-4 w-4 text-gray-500" />
-                <p className="text-lg">{applicationData.hskLevel || 'Not specified'}</p>
-              </div>
-            </div>
-          </div>
 
-          {/* Services */}
-          {getServices().length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-600">Services</Label>
-              <div className="flex flex-wrap gap-2">
-                {getServices().map((service: string, index: number) => (
-                  <Badge key={index} variant="secondary">
-                    {service}
-                  </Badge>
-                ))}
-              </div>
+              <Label htmlFor="city">Location</Label>
+              {isEditing ? (
+                <Input
+                  id="city"
+                  value={profileData.city}
+                  onChange={(e) => handleInputChange('city', e.target.value)}
+                  placeholder="Enter your city"
+                />
+              ) : (
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-gray-500" />
+                  <p className="text-lg">{profileData.city}</p>
+                </div>
+              )}
             </div>
-          )}
 
-          {/* Editable Fields */}
-          <div className="space-y-4 pt-4 border-t">
             <div className="space-y-2">
-              <Label htmlFor="whatsapp">WhatsApp Number</Label>
+              <Label htmlFor="whatsapp">Phone Number</Label>
               {isEditing ? (
                 <Input
                   id="whatsapp"
@@ -290,33 +246,19 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
                   placeholder="Enter your WhatsApp number"
                 />
               ) : (
-                <p className="text-lg">{profileData.whatsapp || 'Not provided'}</p>
-              )}
-            </div>
-              
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <p className="text-sm text-gray-600">
-                Describe your experience, specializations, and what makes you unique as a translator/guide
-              </p>
-              {isEditing ? (
-                <Textarea
-                  id="description"
-                  value={profileData.description}
-                  onChange={(e) => handleInputChange('description', e.target.value)}
-                  placeholder="Tell clients about your experience, specializations, and what makes you unique..."
-                  rows={6}
-                />
-              ) : (
-                <div className="bg-gray-50 rounded-lg p-4 min-h-[100px]">
-                  {profileData.description ? (
-                    <p className="text-gray-800 whitespace-pre-wrap">{profileData.description}</p>
-                  ) : (
-                    <p className="text-gray-500 italic">No description provided yet. Click "Edit Profile" to add one. This will be shown to clients</p>
-                  )}
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-gray-500" />
+                  <p className="text-lg">{profileData.whatsapp || 'Not provided'}</p>
                 </div>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-600">Intent</Label>
+              <div className="flex items-center gap-2">
+                <Briefcase className="h-4 w-4 text-gray-500" />
+                <p className="text-lg">{getIntentLabel(applicationData.intent)}</p>
+              </div>
             </div>
           </div>
 
@@ -347,7 +289,7 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Star className="h-5 w-5" />
+            <Shield className="h-5 w-5" />
             Verification Status
           </CardTitle>
         </CardHeader>
@@ -356,13 +298,13 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-600 mr-2">Status</Label>
               <Badge variant={
-                applicationData.status === 'approved' && applicationData.verificationSteps?.adminApproved 
+                applicationData.status === 'approved' 
                   ? "default" 
                   : applicationData.status === 'rejected' 
                   ? "destructive" 
                   : "secondary"
               }>
-                {applicationData.status === 'approved' && applicationData.verificationSteps?.adminApproved 
+                {applicationData.status === 'approved' 
                   ? "Verified" 
                   : applicationData.status === 'rejected' 
                   ? "Rejected" 
@@ -370,8 +312,10 @@ export default function ProfileManagement({ applicationData, onUpdate }: Profile
               </Badge>
             </div>
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-600">Completeness Score</Label>
-              <p className="text-lg font-semibold">{completenessScore}/100</p>
+              <Label className="text-sm font-medium text-gray-600 mr-2">Email Verified</Label>
+              <Badge variant={applicationData.verificationSteps?.emailVerified ? "default" : "secondary"}>
+                {applicationData.verificationSteps?.emailVerified ? "Yes" : "No"}
+              </Badge>
             </div>
           </div>
         </CardContent>

@@ -320,6 +320,29 @@ export class FirebaseStorage {
     } as Application;
   }
 
+  async getApplicationByFirebaseUid(firebaseUid: string): Promise<Application | undefined> {
+    console.log(`🔍 FirebaseStorage: Searching for application with Firebase UID: ${firebaseUid}`);
+    
+    const snapshot = await this.applicationsCollection
+      .where('firebaseUid', '==', firebaseUid)
+      .limit(1)
+      .get();
+    
+    if (snapshot.empty) {
+      console.log(`❌ FirebaseStorage: No application found with Firebase UID: ${firebaseUid}`);
+      return undefined;
+    }
+    
+    const doc = snapshot.docs[0];
+    const data = doc.data() || {};
+    const { id: _, ...cleanData } = data;
+    
+    return {
+      ...cleanData,
+      id: doc.id
+    } as Application;
+  }
+
   // Document upload methods for applications
   async updateStudentDocument(id: string, documentUrl: string): Promise<void> {
     console.log(`📄 FirebaseStorage: Updating student document for ${id}`);
@@ -424,6 +447,44 @@ export class FirebaseStorage {
 
     await this.applicationsCollection.doc(id).update(updateData);
     console.log(`✅ FirebaseStorage: CV document updated for ${id}`);
+  }
+
+  async updateKtpDocument(id: string, documentUrl: string): Promise<void> {
+    console.log(`📄 FirebaseStorage: Updating KTP document for ${id}`);
+    
+    // Get current application to check for change requests
+    const application = await this.getApplication(id);
+    const updateData: any = {
+      ktpDocument: {
+        url: documentUrl,
+        status: 'pending'
+      },
+      'verificationSteps.ktpUploaded': true,
+      'verificationSteps.ktpStatus': 'pending', // Reset status to pending for admin review
+      updatedAt: new Date()
+    };
+
+    // Clear change requests if this document was requested for changes
+    if (application && (application as any).changeRequests?.requests) {
+      const filteredRequests = (application as any).changeRequests.requests.filter(
+        (req: any) => req.type !== 'ktp'
+      );
+      
+      if (filteredRequests.length === 0) {
+        // No more change requests, remove the field entirely
+        updateData.changeRequests = null;
+      } else {
+        // Update with remaining requests
+        updateData.changeRequests = {
+          ...(application as any).changeRequests,
+          requests: filteredRequests
+        };
+      }
+      console.log(`✅ FirebaseStorage: Cleared KTP change request for ${id}`);
+    }
+
+    await this.applicationsCollection.doc(id).update(updateData);
+    console.log(`✅ FirebaseStorage: KTP document updated for ${id}`);
   }
 
   async updateIntroVideo(id: string, videoUrl: string): Promise<void> {
@@ -607,6 +668,12 @@ export class FirebaseStorage {
             updateData.introVideo = null;
             updateData['verificationSteps.introVideoUploaded'] = false;
           }
+
+          if (docType === 'ktp' && (application as any).ktpDocument?.url) {
+            console.log(`🗑️ FirebaseStorage: Deleting KTP document: ${(application as any).ktpDocument.url}`);
+            await this.deleteFileFromStorage((application as any).ktpDocument.url);
+            updateData.ktpDocument = null;
+          }
         } catch (fileDeleteError) {
           console.error(`⚠️ FirebaseStorage: Error deleting ${docType} file (continuing anyway):`, fileDeleteError);
           // Still clear the document reference even if file deletion fails
@@ -619,6 +686,8 @@ export class FirebaseStorage {
           } else if (docType === 'introVideo') {
             updateData.introVideo = null;
             updateData['verificationSteps.introVideoUploaded'] = false;
+          } else if (docType === 'ktp') {
+            updateData.ktpDocument = null;
           }
         }
       }
@@ -811,15 +880,28 @@ export class FirebaseStorage {
       throw error;
     }
 
-    const payload: any = {
-      ...bookingData,
-      // Persist dateRange as array of dates for multi-day, keep single date for one-day
-      ...(requestedDates.length > 1
-        ? { dateRange: requestedDates, date: undefined }
-        : { date: requestedDates[0] }),
+    // Build payload while avoiding undefined fields
+    const baseData: any = { ...bookingData };
+    // Remove potentially conflicting date fields from input
+    delete baseData.date;
+    delete baseData.dateRange;
+    
+    let payload: any = {
+      ...baseData,
       createdAt: new Date(),
       updatedAt: new Date()
     };
+    if (requestedDates.length > 1) {
+      payload.dateRange = requestedDates;
+    } else if (requestedDates.length === 1) {
+      payload.date = requestedDates[0];
+    }
+    // Compute total price based on number of days
+    const numDays = Math.max(requestedDates.length || 1, 1);
+    const pricePerDay = Number(bookingData.pricePerDay) || 0;
+    payload.totalPrice = pricePerDay * numDays;
+    // Strip undefined values
+    payload = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined));
 
     const docRef = await this.bookingsCollection.add(payload);
 
@@ -928,19 +1010,18 @@ export class FirebaseStorage {
   }
 
   private extractRequestedDates(bookingData: any): string[] {
-    // If dateRange is already an array of dates, use it
-    if (Array.isArray(bookingData.dateRange) && bookingData.dateRange.length > 0) {
+    // If dateRange provided, expand when it's [start, end];
+    // if it's a list of explicit dates, return as-is
+    if (Array.isArray(bookingData.dateRange)) {
+      if (
+        bookingData.dateRange.length === 2 &&
+        typeof bookingData.dateRange[0] === 'string' &&
+        typeof bookingData.dateRange[1] === 'string'
+      ) {
+        return this.expandDateRange(bookingData.dateRange[0], bookingData.dateRange[1]);
+      }
+      // Treat as explicit list of dates
       return bookingData.dateRange.map((d: any) => String(d));
-    }
-    // If dateRange is [start, end], expand inclusively
-    if (
-      bookingData.dateRange &&
-      Array.isArray(bookingData.dateRange) &&
-      bookingData.dateRange.length === 2 &&
-      typeof bookingData.dateRange[0] === 'string' &&
-      typeof bookingData.dateRange[1] === 'string'
-    ) {
-      return this.expandDateRange(bookingData.dateRange[0], bookingData.dateRange[1]);
     }
     // Support alternate field names
     if (bookingData.startDate && bookingData.endDate) {

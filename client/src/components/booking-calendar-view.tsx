@@ -4,7 +4,8 @@ import { Calendar } from 'lucide-react';
 
 interface Booking {
   id: string;
-  date: string;
+  date?: string;
+  dateRange?: string[];
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
   clientName: string;
   clientEmail: string;
@@ -107,7 +108,11 @@ export default function BookingCalendarView({ bookings, userId }: BookingCalenda
 
   // Check if date has pending bookings
   const getDateBookingStatus = (date: string) => {
-    const dateBookings = bookings.filter(booking => booking.date === date);
+    const dateBookings = bookings.filter(booking => {
+      if (booking.date) return booking.date === date;
+      if (Array.isArray(booking.dateRange)) return booking.dateRange.includes(date);
+      return false;
+    });
     if (dateBookings.length === 0) return null;
     
     // Check if any booking is confirmed
@@ -140,13 +145,13 @@ export default function BookingCalendarView({ bookings, userId }: BookingCalenda
       {/* Navigation */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={goToPreviousMonth}>
+          <Button variant="outline" size="sm" onClick={goToPreviousMonth} className='hover:bg-red-700'>
             ← Bulan Lalu
           </Button>
-          <Button variant="outline" size="sm" onClick={goToThisMonth}>
+          <Button variant="outline" size="sm" onClick={goToThisMonth} className='hover:bg-red-700'>
             Bulan Ini
           </Button>
-          <Button variant="outline" size="sm" onClick={goToNextMonth}>
+          <Button variant="outline" size="sm" onClick={goToNextMonth} className='hover:bg-red-700'>
             Bulan Depan →
           </Button>
         </div>

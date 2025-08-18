@@ -608,7 +608,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: message || `Please resubmit your ${
             change === 'hsk' ? 'HSK Certificate' : 
             change === 'studentId' ? 'Student ID Document' : 
-            change === 'cv' ? 'CV/Resume' : 'document'
+            change === 'cv' ? 'CV/Resume' : 
+            change === 'ktp' ? 'KTP Document' : 'document'
           }`,
           requestedAt: new Date().toISOString(),
           status: 'pending'
@@ -631,6 +632,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (change === 'cv') {
           updatedVerificationSteps.cvStatus = 'changes_requested';
           updatedVerificationSteps.cvUploaded = false; // Reset upload status
+        } else if (change === 'ktp') {
+          updatedVerificationSteps.ktpStatus = 'changes_requested';
+          updatedVerificationSteps.ktpUploaded = false; // Reset upload status
         }
       });
       
@@ -1049,7 +1053,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
 
         let userRole = 'user';
-        if (userApplication.status === 'approved') {
+        const appIntent = (userApplication as any).intent;
+        if (appIntent === 'individu' || appIntent === 'travel_agency') {
+          userRole = 'client';
+        } else if (userApplication.status === 'approved') {
           userRole = 'translator';
         }
 
@@ -1119,7 +1126,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const documentFieldMap: { [key: string]: string } = {
         'hsk': 'hskStatus',
         'studentId': 'studentIdStatus',
-        'cv': 'cvStatus'
+        'cv': 'cvStatus',
+        'ktp': 'ktpStatus'
       };
 
       const statusField = documentFieldMap[documentType];
@@ -1148,6 +1156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           hskUploaded: 25,
           cvUploaded: 20,
           introVideoUploaded: 10,
+          ktpUploaded: 20,
         };
         
         let score = 0;
@@ -1156,6 +1165,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (verificationSteps.hskUploaded && verificationSteps.hskStatus === 'approved') score += points.hskUploaded;
         if (verificationSteps.cvUploaded && verificationSteps.cvStatus === 'approved') score += points.cvUploaded;
         if (verificationSteps.introVideoUploaded) score += points.introVideoUploaded;
+        if (verificationSteps.ktpUploaded && verificationSteps.ktpStatus === 'approved') score += points.ktpUploaded;
 
         const progress = Math.min(score, 100);
         console.log('📈 Calculated completeness score:', progress, 'from verification steps');
@@ -1185,6 +1195,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error fetching application:', error);
       res.status(500).json({ message: "Failed to fetch application" });
+    }
+  });
+
+  // Get client application by Firebase UID
+  app.get("/api/applications/client/:uid", async (req, res) => {
+    try {
+      const { uid } = req.params;
+      const application = await storage.getApplicationByFirebaseUid(uid);
+      
+      if (!application) {
+        return res.status(404).json({ message: "Client application not found" });
+      }
+
+      res.json(application);
+    } catch (error) {
+      console.error('Error fetching client application:', error);
+      res.status(500).json({ message: "Failed to fetch client application" });
     }
   });
 
@@ -1252,6 +1279,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('❌ Error getting availability:', error);
       res.status(500).json({ message: "Failed to get availability" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // CLIENT APPLICATION (END USERS SEEKING TRANSLATORS)
+  // ---------------------------------------------------------------------------
+  app.post("/api/applications/client", async (req, res) => {
+    try {
+      console.log("📥 [CLIENT APPLICATION] Incoming payload (before flatten):", {
+        ...req.body,
+        password: req.body?.password ? "[HIDDEN]" : "NO PASSWORD",
+      });
+
+      // Flatten questionnaireData if provided by the frontend
+      if (req.body?.questionnaireData) {
+        req.body = { ...req.body, ...req.body.questionnaireData };
+        delete req.body.questionnaireData;
+      }
+
+      console.log("📥 [CLIENT APPLICATION] Payload (after flatten):", {
+        ...req.body,
+        password: req.body?.password ? "[HIDDEN]" : "NO PASSWORD",
+      });
+
+      // Minimal validation for client account
+      if (!req.body?.name || !req.body?.email) {
+        return res.status(400).json({ message: 'Name and email are required' });
+      }
+
+      // Hash password if present
+      let hashedPassword: string | undefined = undefined;
+      if (req.body.password) {
+        hashedPassword = await bcrypt.hash(req.body.password, 10);
+      }
+
+      const applicationData: any = {
+        ...req.body,
+        password: hashedPassword,
+        intent: req.body.intent || "individu",
+        profileImage: null,
+        identityDocument: null,
+        certificates: [],
+      };
+
+      // Remove confirmPassword before saving
+      delete applicationData.confirmPassword;
+
+      const application = await storage.createApplication(applicationData);
+      console.log("✅ [CLIENT APPLICATION] Saved with ID:", application.id);
+
+      // Create Firebase Auth user for client and send verification email
+      try {
+        const { createUserWithoutStudentEmailCheck } = await import('./auth');
+        const { uid, emailSent } = await createUserWithoutStudentEmailCheck(
+          applicationData.email,
+          applicationData.name,
+          application.id
+        );
+
+        await storage.updateApplicationEmailVerification(application.id, uid);
+
+        return res.status(201).json({
+          ...application,
+          firebaseUid: uid,
+          emailVerificationSent: emailSent,
+          message: emailSent ? 'Silakan cek email Anda untuk verifikasi akun' : 'Akun berhasil dibuat'
+        });
+      } catch (userError) {
+        console.error("❌ [CLIENT APPLICATION] Firebase user creation/verif email failed:", userError);
+        return res.status(201).json({
+          ...application,
+          emailVerificationSent: false,
+          message: 'Akun berhasil dibuat tetapi gagal mengirim email verifikasi'
+        });
+      }
+    } catch (error) {
+      console.log("❌ [CLIENT APPLICATION] Error:", error);
+      if ((error as any)?.errors) {
+        return res.status(400).json({ message: "Validation error", errors: (error as any).errors });
+      }
+      return res.status(500).json({ message: "Failed to create application" });
     }
   });
 

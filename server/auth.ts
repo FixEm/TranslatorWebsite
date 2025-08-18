@@ -4,6 +4,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import crypto from 'crypto';
 import { sendVerificationEmail } from './email-service';
+import { sendClientVerificationEmail } from './email-service-client';
 
 // Initialize Firebase Admin if not already initialized
 if (!getApps().length) {
@@ -247,6 +248,70 @@ export async function getUserByEmail(email: string): Promise<any> {
   } catch (error: any) {
     if (error.code === 'auth/user-not-found') {
       return null;
+    }
+    throw error;
+  }
+}
+
+// Create Firebase user for clients (no student email requirement) and send verification email
+export async function createUserWithoutStudentEmailCheck(
+  email: string,
+  name: string,
+  applicationId: string
+): Promise<{ uid: string; emailSent: boolean }> {
+  try {
+    const tempPassword = Math.random().toString(36).slice(-8) +
+      Math.random().toString(36).slice(-8) + '!A1';
+
+    const userRecord = await auth.createUser({
+      email,
+      password: tempPassword,
+      displayName: name,
+      emailVerified: false,
+    });
+
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+
+    await db.collection('email_verifications').doc(userRecord.uid).set({
+      email,
+      applicationId,
+      verified: false,
+      verificationToken,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    const emailSent = await sendClientVerificationEmail(
+      email,
+      name,
+      verificationToken,
+      applicationId
+    );
+
+    return { uid: userRecord.uid, emailSent };
+  } catch (error: any) {
+    // If user already exists, try to resend verification if not verified
+    if (error.code === 'auth/email-already-in-use') {
+      const existing = await auth.getUserByEmail(email);
+      if (!existing.emailVerified) {
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        await db.collection('email_verifications').doc(existing.uid).set({
+          email,
+          applicationId,
+          verified: false,
+          verificationToken,
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        });
+        const emailSent = await sendClientVerificationEmail(
+          email,
+          name,
+          verificationToken,
+          applicationId
+        );
+        return { uid: existing.uid, emailSent };
+      }
+      return { uid: existing.uid, emailSent: false };
     }
     throw error;
   }
