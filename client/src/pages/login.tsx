@@ -48,9 +48,9 @@ export default function LoginPage() {
       
       // Redirect based on user role after successful login
       if (userData?.role === 'translator') {
-        setLocation('/translator/dashboard?tab=verification');
+        setLocation('/');
       } else if (userData?.role === 'admin') {
-        setLocation('/admin/dashboard');
+        setLocation('/admin');
       } else {
         setLocation('/');
       }
