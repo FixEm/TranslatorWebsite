@@ -2396,22 +2396,7 @@ export default function AdminPage() {
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                 <div className="flex items-center gap-2">
                                   <Button variant="outline" size="sm" onClick={() => setSelectedClient(c)}>View Details</Button>
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="outline" size="sm">
-                                        <Menu className="h-4 w-4" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent>
-                                      <DropdownMenuItem onClick={() => updateApplicationStatus(c.id, 'approved')}>Approve</DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => updateApplicationStatus(c.id, 'rejected')}>Reject</DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => updateApplicationStatus(c.id, 'pending')}>Pending</DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => {
-                                        setSelectedCandidate(c);
-                                        setRequestChangesModalOpen(true);
-                                      }}>Request Changes</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
+                                 
                                 </div>
                               </td>
                             </tr>
