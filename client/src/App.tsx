@@ -14,6 +14,7 @@ import TranslatorSignup from "@/pages/translator-signup";
 import TranslatorDashboard from "@/pages/translator-dashboard";
 import ClientDashboard from "@/pages/client-dashboard";
 import EditProfile from "@/pages/edit-profile";
+import ChatPage from "@/pages/chat";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -29,6 +30,7 @@ function Router() {
       <Route path="/translator/dashboard" component={TranslatorDashboard} />
       <Route path="/client/dashboard" component={ClientDashboard} />
       <Route path="/edit-profile" component={EditProfile} />
+      <Route path="/chat" component={ChatPage} />
       <Route component={NotFound} />
     </Switch>
   );
