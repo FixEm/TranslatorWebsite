@@ -400,6 +400,30 @@ export default function AvailabilityCalendar({
     }));
   };
 
+  // Calculate total available days for current view
+  const calculateTotalAvailableDays = () => {
+    let totalAvailable = 0;
+
+    // Count available days in both months
+    [...firstMonthDates, ...secondMonthDates].forEach(
+      ({ date, isCurrentMonth }) => {
+        if (!isCurrentMonth) return;
+
+        const dateStr = formatDate(date);
+        const isAvailable = isDateAvailable(dateStr);
+        const isUnavailable = isDateUnavailable(dateStr);
+        const isPast =
+          date < new Date(getCurrentDateUTC7().setHours(0, 0, 0, 0));
+
+        if (isAvailable && !isUnavailable && !isPast) {
+          totalAvailable++;
+        }
+      }
+    );
+
+    return totalAvailable;
+  };
+
   // Navigation
   const goToPreviousMonth = () => {
     setSelectedMonth(
@@ -641,17 +665,25 @@ export default function AvailabilityCalendar({
               </Button>
             </div>
           </div>
-          <p className="text-sm text-gray-600">
-            {firstMonth.toLocaleDateString("id-ID", {
-              year: "numeric",
-              month: "long",
-            })}{" "}
-            -{" "}
-            {secondMonth.toLocaleDateString("id-ID", {
-              year: "numeric",
-              month: "long",
-            })}
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              {firstMonth.toLocaleDateString("id-ID", {
+                year: "numeric",
+                month: "long",
+              })}{" "}
+              -{" "}
+              {secondMonth.toLocaleDateString("id-ID", {
+                year: "numeric",
+                month: "long",
+              })}
+            </p>
+            <Badge
+              variant="secondary"
+              className="bg-green-100 text-green-800 border-green-300"
+            >
+              Total Tersedia: {calculateTotalAvailableDays()} hari
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent>
           {/* Two Month Calendar Grid */}
@@ -685,15 +717,20 @@ export default function AvailabilityCalendar({
                       date <
                       new Date(getCurrentDateUTC7().setHours(0, 0, 0, 0));
 
+                    // Skip rendering if not current month
+                    if (!isCurrentMonth) {
+                      return (
+                        <div key={index} className="p-3 min-h-[48px]"></div>
+                      );
+                    }
+
                     return (
                       <button
                         key={index}
                         className={`
                         p-3 border rounded-lg transition-all duration-200 min-h-[48px] flex items-center justify-center
                         ${
-                          !isCurrentMonth
-                            ? "text-gray-300 bg-gray-50 cursor-default"
-                            : isPast
+                          isPast
                             ? "text-gray-400 bg-gray-100 cursor-not-allowed"
                             : isUnavailable
                             ? "bg-red-100 border-red-200 text-red-700 cursor-not-allowed"
@@ -706,14 +743,11 @@ export default function AvailabilityCalendar({
                       `}
                         onClick={() =>
                           !readOnly &&
-                          isCurrentMonth &&
                           !isPast &&
                           !isUnavailable &&
                           toggleDate(dateStr)
                         }
-                        disabled={
-                          readOnly || !isCurrentMonth || isPast || isUnavailable
-                        }
+                        disabled={readOnly || isPast || isUnavailable}
                         title={
                           isUnavailable
                             ? "Tidak tersedia (periode liburan/ujian)"
@@ -769,15 +803,20 @@ export default function AvailabilityCalendar({
                       date <
                       new Date(getCurrentDateUTC7().setHours(0, 0, 0, 0));
 
+                    // Skip rendering if not current month
+                    if (!isCurrentMonth) {
+                      return (
+                        <div key={index} className="p-3 min-h-[48px]"></div>
+                      );
+                    }
+
                     return (
                       <button
                         key={index}
                         className={`
                         p-3 border rounded-lg transition-all duration-200 min-h-[48px] flex items-center justify-center
                         ${
-                          !isCurrentMonth
-                            ? "text-gray-300 bg-gray-50 cursor-default"
-                            : isPast
+                          isPast
                             ? "text-gray-400 bg-gray-100 cursor-not-allowed"
                             : isUnavailable
                             ? "bg-red-100 border-red-200 text-red-700 cursor-not-allowed"
@@ -790,14 +829,11 @@ export default function AvailabilityCalendar({
                       `}
                         onClick={() =>
                           !readOnly &&
-                          isCurrentMonth &&
                           !isPast &&
                           !isUnavailable &&
                           toggleDate(dateStr)
                         }
-                        disabled={
-                          readOnly || !isCurrentMonth || isPast || isUnavailable
-                        }
+                        disabled={readOnly || isPast || isUnavailable}
                         title={
                           isUnavailable
                             ? "Tidak tersedia (periode liburan/ujian)"

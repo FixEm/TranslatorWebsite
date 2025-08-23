@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -12,7 +18,10 @@ interface ClientVerificationStatusProps {
   onUpdate?: () => void;
 }
 
-export default function ClientVerificationStatus({ applicationData, onUpdate }: ClientVerificationStatusProps) {
+export default function ClientVerificationStatus({
+  applicationData,
+  onUpdate,
+}: ClientVerificationStatusProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -22,18 +31,26 @@ export default function ClientVerificationStatus({ applicationData, onUpdate }: 
     adminApproved: false,
   });
 
-  const progress = (steps.emailVerified ? 50 : 0) + (steps.ktpUploaded ? 50 : 0);
+  const progress =
+    (steps.emailVerified ? 50 : 0) + (steps.ktpUploaded ? 50 : 0);
 
   useEffect(() => {
     if (applicationData?.verificationSteps) {
       const v = applicationData.verificationSteps as any;
       setSteps({
         emailVerified: Boolean(user?.emailVerified ?? v.emailVerified),
-        ktpUploaded: Boolean(v.ktpUploaded && v.ktpStatus !== 'changes_requested'),
-        adminApproved: Boolean(v.adminApproved || applicationData.status === 'approved'),
+        ktpUploaded: Boolean(
+          v.ktpUploaded && v.ktpStatus !== "changes_requested"
+        ),
+        adminApproved: Boolean(
+          v.adminApproved || applicationData.status === "approved"
+        ),
       });
     } else if (user) {
-      setSteps(prev => ({ ...prev, emailVerified: Boolean(user.emailVerified) }));
+      setSteps((prev) => ({
+        ...prev,
+        emailVerified: Boolean(user.emailVerified),
+      }));
     }
   }, [applicationData, user]);
 
@@ -41,11 +58,21 @@ export default function ClientVerificationStatus({ applicationData, onUpdate }: 
     if (!applicationData?.id) return;
     setIsLoading(true);
     try {
-      const resp = await fetch(`/api/applications/${applicationData.id}/resend-verification`, { method: 'POST' });
-      if (!resp.ok) throw new Error('Failed to send');
-      toast({ title: 'Email terkirim', description: 'Silakan cek email Anda.' });
+      const resp = await fetch(
+        `/api/applications/${applicationData.id}/resend-verification`,
+        { method: "POST" }
+      );
+      if (!resp.ok) throw new Error("Failed to send");
+      toast({
+        title: "Email terkirim",
+        description: "Silakan cek email Anda.",
+      });
     } catch (e: any) {
-      toast({ title: 'Gagal kirim email', description: e.message || 'Terjadi kesalahan', variant: 'destructive' });
+      toast({
+        title: "Gagal kirim email",
+        description: e.message || "Terjadi kesalahan",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -53,23 +80,33 @@ export default function ClientVerificationStatus({ applicationData, onUpdate }: 
 
   const uploadKtp = async () => {
     if (!applicationData?.id) return;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*,.pdf';
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*,.pdf";
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
       setIsLoading(true);
       try {
         const fd = new FormData();
-        fd.append('ktp', file); // Use ktp field for KTP uploads
-        const resp = await fetch(`/api/applications/${applicationData.id}/upload/ktp`, { method: 'POST', body: fd });
-        if (!resp.ok) throw new Error('Upload gagal');
-        setSteps(prev => ({ ...prev, ktpUploaded: true }));
-        toast({ title: 'Upload berhasil', description: `${file.name} terunggah.` });
+        fd.append("ktp", file); // Use ktp field for KTP uploads
+        const resp = await fetch(
+          `/api/applications/${applicationData.id}/upload/ktp`,
+          { method: "POST", body: fd }
+        );
+        if (!resp.ok) throw new Error("Upload gagal");
+        setSteps((prev) => ({ ...prev, ktpUploaded: true }));
+        toast({
+          title: "Upload berhasil",
+          description: `${file.name} terunggah.`,
+        });
         onUpdate?.();
       } catch (e: any) {
-        toast({ title: 'Upload gagal', description: e.message || 'Terjadi kesalahan', variant: 'destructive' });
+        toast({
+          title: "Upload gagal",
+          description: e.message || "Terjadi kesalahan",
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
@@ -82,7 +119,10 @@ export default function ClientVerificationStatus({ applicationData, onUpdate }: 
       <Card>
         <CardHeader>
           <CardTitle>Status Verifikasi Akun</CardTitle>
-          <CardDescription>Lengkapi verifikasi email dan upload KTP. Akun akan diaktifkan setelah review admin.</CardDescription>
+          <CardDescription>
+            Lengkapi verifikasi email dan upload KTP. Akun akan diaktifkan
+            setelah review admin.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
@@ -90,7 +130,7 @@ export default function ClientVerificationStatus({ applicationData, onUpdate }: 
               <span className="text-sm font-medium">Kelengkapan Profil</span>
               <span className="text-sm font-bold">{progress}/100 poin</span>
             </div>
-            <Progress value={progress} className="h-2" />
+            <Progress value={progress} className="h-2  [&>div]:bg-green-500" />
           </div>
         </CardContent>
       </Card>
@@ -103,31 +143,57 @@ export default function ClientVerificationStatus({ applicationData, onUpdate }: 
           {/* Email */}
           <div className="flex items-center justify-between p-4 border rounded-lg">
             <div className="flex items-center gap-3">
-              {steps.emailVerified ? <CheckCircle className="h-5 w-5 text-green-500" /> : <Mail className="h-5 w-5 text-gray-400" />}
+              {steps.emailVerified ? (
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              ) : (
+                <Mail className="h-5 w-5 text-gray-400" />
+              )}
               <div>
                 <div className="font-medium">Verifikasi Email</div>
-                <div className="text-sm text-gray-600">Konfirmasi alamat email Anda</div>
+                <div className="text-sm text-gray-600">
+                  Konfirmasi alamat email Anda
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {!steps.emailVerified && (
-                <Button size="sm" variant="outline" onClick={resendVerification} disabled={isLoading}>Kirim Ulang</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={resendVerification}
+                  disabled={isLoading}
+                >
+                  Kirim Ulang
+                </Button>
               )}
-              <Badge variant={steps.emailVerified ? 'default' : 'outline'}>50 poin</Badge>
+              <Badge
+                className="bg-red-700"
+                variant={steps.emailVerified ? "default" : "outline"}
+              >
+                50 poin
+              </Badge>
             </div>
           </div>
 
           {/* KTP */}
           <div className="flex items-center justify-between p-4 border rounded-lg">
             <div className="flex items-center gap-3">
-              {steps.ktpUploaded ? <CheckCircle className="h-5 w-5 text-green-500" /> : <Upload className="h-5 w-5 text-gray-400" />}
+              {steps.ktpUploaded ? (
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              ) : (
+                <Upload className="h-5 w-5 text-gray-400" />
+              )}
               <div>
                 <div className="font-medium">Kartu Tanda Penduduk (KTP)</div>
                 <div className="text-sm text-gray-600">Upload KTP Anda</div>
                 {/* Show change request if exists */}
-                {applicationData?.verificationSteps?.ktpStatus === 'changes_requested' && (
+                {applicationData?.verificationSteps?.ktpStatus ===
+                  "changes_requested" && (
                   <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-                    <strong>Perubahan Diminta:</strong> {applicationData?.changeRequests?.requests?.find((r: any) => r.type === 'ktp')?.message || 'Admin meminta perubahan pada KTP Anda'}
+                    <strong>Perubahan Diminta:</strong>{" "}
+                    {applicationData?.changeRequests?.requests?.find(
+                      (r: any) => r.type === "ktp"
+                    )?.message || "Admin meminta perubahan pada KTP Anda"}
                   </div>
                 )}
               </div>
@@ -138,25 +204,41 @@ export default function ClientVerificationStatus({ applicationData, onUpdate }: 
                   <Upload className="h-4 w-4 mr-2" /> Upload
                 </Button>
               )}
-              <Badge variant={steps.ktpUploaded ? 'default' : 'outline'}>50 poin</Badge>
+              <Badge
+                className="bg-red-700"
+                variant={steps.ktpUploaded ? "default" : "outline"}
+              >
+                50 poin
+              </Badge>
             </div>
           </div>
 
           {/* Admin Review */}
           <div className="flex items-center justify-between p-4 border rounded-lg">
             <div className="flex items-center gap-3">
-              {steps.adminApproved ? <CheckCircle className="h-5 w-5 text-green-500" /> : <Clock className="h-5 w-5 text-gray-400" />}
+              {steps.adminApproved ? (
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              ) : (
+                <Clock className="h-5 w-5 text-gray-400" />
+              )}
               <div>
                 <div className="font-medium">Review Admin</div>
-                <div className="text-sm text-gray-600">{steps.adminApproved ? 'Akun telah disetujui' : 'Menunggu persetujuan admin'}</div>
+                <div className="text-sm text-gray-600">
+                  {steps.adminApproved
+                    ? "Akun telah disetujui"
+                    : "Menunggu persetujuan admin"}
+                </div>
               </div>
             </div>
-            <Badge variant={steps.adminApproved ? 'default' : 'outline'}>{steps.adminApproved ? 'Terverifikasi' : 'Pending'}</Badge>
+            <Badge
+              className="bg-red-700"
+              variant={steps.adminApproved ? "default" : "outline"}
+            >
+              {steps.adminApproved ? "Terverifikasi" : "Pending"}
+            </Badge>
           </div>
         </CardContent>
       </Card>
     </div>
   );
 }
-
-

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -15,6 +15,7 @@ import {
   Check,
   CheckCheck,
   X,
+  Loader2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -35,6 +36,21 @@ interface ChatProps {
   onClose?: () => void;
 }
 
+// Throttle function to limit frequent updates
+function throttle<T extends (...args: any[]) => any>(
+  func: T,
+  limit: number
+): T {
+  let inThrottle: boolean;
+  return ((...args: any[]) => {
+    if (!inThrottle) {
+      func(...args);
+      inThrottle = true;
+      setTimeout(() => (inThrottle = false), limit);
+    }
+  }) as T;
+}
+
 export default function Chat({
   conversationId,
   currentUserId,
@@ -49,70 +65,166 @@ export default function Chat({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [hasNewMessages, setHasNewMessages] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [isIdle, setIsIdle] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
+  const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Constants for optimization
+  const MESSAGE_LIMIT = 50;
+  const IDLE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+  const TYPING_DEBOUNCE = 2000; // 2 seconds
 
   // Auto-scroll to bottom when new messages arrive
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     // Clear new messages indicator when scrolling to bottom
     setHasNewMessages(false);
-  };
+  }, []);
 
-  // Load messages
-  const loadMessages = async (isPolling = false) => {
-    try {
-      // Only show loading state on initial load, not during polling
-      if (!isPolling) {
-        setIsLoading(true);
+  // Update last activity and reset idle state
+  const updateActivity = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    if (isIdle) {
+      setIsIdle(false);
+      // Reconnect listener when user becomes active
+      setupMessageListener();
+    }
+
+    // Clear existing idle timeout
+    if (idleTimeoutRef.current) {
+      clearTimeout(idleTimeoutRef.current);
+    }
+
+    // Set new idle timeout
+    idleTimeoutRef.current = setTimeout(() => {
+      setIsIdle(true);
+      // Disconnect listener when idle
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
       }
+    }, IDLE_TIMEOUT);
+  }, [isIdle]);
 
-      const fetchedMessages = await chatAPI.getMessages(conversationId);
+  // Setup message listener with optimization
+  const setupMessageListener = useCallback(() => {
+    if (!conversationId || isIdle) return;
 
-      // If polling, only update if there are new messages
-      if (isPolling) {
-        const hasNewMessagesCount = fetchedMessages.length > messages.length;
-        if (!hasNewMessagesCount) {
-          return; // No new messages, don't update state
-        }
-        // Set flag to show new messages indicator
-        setHasNewMessages(true);
-      }
+    console.log(
+      "🔗 Setting up message listener for conversation:",
+      conversationId
+    );
 
-      setMessages(fetchedMessages);
+    // Clean up existing listener
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+    }
 
-      // Mark messages as read
-      await chatAPI.markMessagesAsRead(conversationId, currentUserId);
+    // Create real-time listener for messages
+    unsubscribeRef.current = chatAPI.listenToMessages(
+      conversationId,
+      (newMessages) => {
+        // Only update if there are actually new messages
+        if (newMessages.length > messages.length) {
+          console.log(
+            "📨 New messages received:",
+            newMessages.length - messages.length
+          );
+          setMessages(newMessages);
+          setHasNewMessages(true);
 
-      // Only auto-scroll on initial load or if user is at bottom
-      if (!isPolling) {
-        setTimeout(scrollToBottom, 100);
-      } else {
-        // During polling, only scroll if user is already at bottom
-        const scrollArea = scrollAreaRef.current;
-        if (scrollArea) {
-          const { scrollTop, scrollHeight, clientHeight } = scrollArea;
-          const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10;
-          if (isAtBottom) {
-            setTimeout(scrollToBottom, 100);
+          // Auto-scroll if user is at bottom
+          const scrollArea = scrollAreaRef.current;
+          if (scrollArea) {
+            const { scrollTop, scrollHeight, clientHeight } = scrollArea;
+            const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10;
+            if (isAtBottom) {
+              setTimeout(scrollToBottom, 100);
+            }
           }
         }
       }
-    } catch (error) {
-      console.error("Error loading messages:", error);
-      if (!isPolling) {
-        toast({
-          title: "Error",
-          description: "Failed to load messages",
-          variant: "destructive",
-        });
+    );
+  }, [conversationId, messages.length, isIdle, scrollToBottom]);
+
+  // Load messages with pagination
+  const loadMessages = useCallback(
+    async (isInitial = true) => {
+      try {
+        if (isInitial) {
+          setIsLoading(true);
+        } else {
+          setIsLoadingMore(true);
+        }
+
+        const fetchedMessages = await chatAPI.getMessages(
+          conversationId,
+          MESSAGE_LIMIT,
+          isInitial ? undefined : messages[0]?.id
+        );
+
+        if (isInitial) {
+          setMessages(fetchedMessages);
+          setHasMoreMessages(fetchedMessages.length === MESSAGE_LIMIT);
+        } else {
+          // Prepend older messages
+          setMessages((prev) => [...fetchedMessages, ...prev]);
+          setHasMoreMessages(fetchedMessages.length === MESSAGE_LIMIT);
+        }
+
+        // Mark messages as read (throttled to reduce writes)
+        if (isInitial) {
+          await chatAPI.markMessagesAsRead(conversationId, currentUserId);
+        }
+
+        // Only auto-scroll on initial load
+        if (isInitial) {
+          setTimeout(scrollToBottom, 100);
+        }
+      } catch (error) {
+        console.error("Error loading messages:", error);
+        if (isInitial) {
+          toast({
+            title: "Error",
+            description: "Failed to load messages",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        if (isInitial) {
+          setIsLoading(false);
+        } else {
+          setIsLoadingMore(false);
+        }
       }
-    } finally {
-      if (!isPolling) {
-        setIsLoading(false);
-      }
+    },
+    [conversationId, currentUserId, messages, toast, scrollToBottom]
+  );
+
+  // Load more messages (pagination)
+  const loadMoreMessages = useCallback(() => {
+    if (!isLoadingMore && hasMoreMessages) {
+      loadMessages(false);
     }
-  };
+  }, [isLoadingMore, hasMoreMessages, loadMessages]);
+
+  // Throttled mark as read function
+  const throttledMarkAsRead = useCallback(
+    throttle(async () => {
+      try {
+        await chatAPI.markMessagesAsRead(conversationId, currentUserId);
+      } catch (error) {
+        console.error("Error marking messages as read:", error);
+      }
+    }, 5000), // Only mark as read every 5 seconds
+    [conversationId, currentUserId]
+  );
 
   // Send message
   const sendMessage = async () => {
@@ -120,6 +232,8 @@ export default function Chat({
 
     try {
       setIsSending(true);
+      updateActivity(); // Track activity when sending message
+
       const message = await chatAPI.sendMessage(
         conversationId,
         currentUserId,
@@ -143,6 +257,7 @@ export default function Chat({
   // Delete message
   const deleteMessage = async (messageId: string) => {
     try {
+      updateActivity(); // Track activity when deleting message
       await chatAPI.deleteMessage(messageId, currentUserId);
       setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
       toast({
@@ -161,6 +276,7 @@ export default function Chat({
 
   // Edit message
   const startEditing = (message: Message) => {
+    updateActivity(); // Track activity when editing
     setEditingMessageId(message.id);
     setEditContent(message.content);
   };
@@ -169,6 +285,7 @@ export default function Chat({
     if (!editingMessageId || !editContent.trim()) return;
 
     try {
+      updateActivity(); // Track activity when saving edit
       await chatAPI.editMessage(
         editingMessageId,
         currentUserId,
@@ -256,55 +373,79 @@ export default function Chat({
 
   const otherParticipant = getOtherParticipant();
 
+  // Initialize chat
   useEffect(() => {
-    loadMessages();
+    loadMessages(true);
+    setupMessageListener();
+    updateActivity(); // Start activity tracking
+
+    // Cleanup function
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+      }
+    };
   }, [conversationId]);
 
-  // Handle scroll events to clear new messages indicator
+  // Activity tracking effects
+  useEffect(() => {
+    const handleActivity = () => updateActivity();
+
+    // Track user activity
+    const events = [
+      "mousedown",
+      "mousemove",
+      "keypress",
+      "scroll",
+      "touchstart",
+      "click",
+    ];
+    events.forEach((event) => {
+      document.addEventListener(event, handleActivity, true);
+    });
+
+    return () => {
+      events.forEach((event) => {
+        document.removeEventListener(event, handleActivity, true);
+      });
+    };
+  }, [updateActivity]);
+
+  // Handle scroll events to clear new messages indicator and load more messages
   useEffect(() => {
     const scrollArea = scrollAreaRef.current;
     if (!scrollArea) return;
 
     const handleScroll = () => {
+      updateActivity(); // Track scroll activity
+
       const { scrollTop, scrollHeight, clientHeight } = scrollArea;
       const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10;
+
       if (isAtBottom && hasNewMessages) {
         setHasNewMessages(false);
+        throttledMarkAsRead(); // Mark as read when scrolling to bottom
+      }
+
+      // Load more messages when scrolling to top
+      if (scrollTop < 100 && hasMoreMessages && !isLoadingMore) {
+        loadMoreMessages();
       }
     };
 
     scrollArea.addEventListener("scroll", handleScroll);
     return () => scrollArea.removeEventListener("scroll", handleScroll);
-  }, [hasNewMessages]);
-
-  // Set up real-time listener for new messages (cost-effective)
-  useEffect(() => {
-    if (!conversationId) return;
-
-    // Create real-time listener for messages
-    const unsubscribe = chatAPI.listenToMessages(
-      conversationId,
-      (newMessages) => {
-        // Only update if there are actually new messages
-        if (newMessages.length > messages.length) {
-          setMessages(newMessages);
-          setHasNewMessages(true);
-
-          // Auto-scroll if user is at bottom
-          const scrollArea = scrollAreaRef.current;
-          if (scrollArea) {
-            const { scrollTop, scrollHeight, clientHeight } = scrollArea;
-            const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10;
-            if (isAtBottom) {
-              setTimeout(scrollToBottom, 100);
-            }
-          }
-        }
-      }
-    );
-
-    return () => unsubscribe();
-  }, [conversationId]);
+  }, [
+    hasNewMessages,
+    hasMoreMessages,
+    isLoadingMore,
+    updateActivity,
+    throttledMarkAsRead,
+    loadMoreMessages,
+  ]);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -353,11 +494,25 @@ export default function Chat({
                 {otherParticipant?.name || "Unknown User"}
               </CardTitle>
               <p className="text-sm text-gray-500">{otherParticipant?.email}</p>
-              {hasNewMessages && (
-                <Badge variant="destructive" className="text-xs mt-1">
-                  New messages
-                </Badge>
-              )}
+              <div className="flex items-center gap-2 mt-1">
+                {hasNewMessages && (
+                  <Badge variant="destructive" className="text-xs">
+                    New messages
+                  </Badge>
+                )}
+                {isIdle && (
+                  <Badge
+                    variant="outline"
+                    className="text-xs text-gray-500 cursor-pointer hover:bg-gray-100"
+                    onClick={() => {
+                      updateActivity();
+                      setupMessageListener();
+                    }}
+                  >
+                    Idle (click to reconnect)
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
           {onClose && (
@@ -371,6 +526,28 @@ export default function Chat({
       {/* Messages */}
       <CardContent className="flex-1 p-0 overflow-hidden">
         <ScrollArea className="h-full p-4" ref={scrollAreaRef}>
+          {/* Load more messages button */}
+          {hasMoreMessages && (
+            <div className="text-center mb-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadMoreMessages}
+                disabled={isLoadingMore}
+                className="w-full"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  "Load more messages"
+                )}
+              </Button>
+            </div>
+          )}
+
           {messages.length === 0 ? (
             <div className="text-center py-8">
               <MessageSquare className="h-12 w-12 text-gray-300 mx-auto mb-4" />

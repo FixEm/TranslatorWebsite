@@ -2,6 +2,13 @@
 // Since we're using server-side Firebase for most operations, 
 // this is a minimal setup for real-time listeners if needed
 
+// Enable offline persistence for better performance and reduced reads
+if (typeof window !== 'undefined') {
+  // This will be called when the client-side Firebase is initialized
+  // For now, we'll add a comment about enabling offline persistence
+  console.log('💾 Firebase offline persistence should be enabled for better performance');
+}
+
 export interface Message {
   id: string;
   conversationId: string;

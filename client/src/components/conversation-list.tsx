@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Badge } from "./ui/badge";
@@ -28,9 +28,63 @@ export default function ConversationList({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isIdle, setIsIdle] = useState(false);
+
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
+  const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Constants for optimization
+  const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes (longer for conversation list)
+
+  // Update last activity and reset idle state
+  const updateActivity = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    if (isIdle) {
+      setIsIdle(false);
+      // Reconnect listener when user becomes active
+      setupConversationListener();
+    }
+
+    // Clear existing idle timeout
+    if (idleTimeoutRef.current) {
+      clearTimeout(idleTimeoutRef.current);
+    }
+
+    // Set new idle timeout
+    idleTimeoutRef.current = setTimeout(() => {
+      setIsIdle(true);
+      // Disconnect listener when idle
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+    }, IDLE_TIMEOUT);
+  }, [isIdle]);
+
+  // Setup conversation listener with optimization
+  const setupConversationListener = useCallback(() => {
+    if (!currentUserId || isIdle) return;
+
+    console.log("🔗 Setting up conversation listener for user:", currentUserId);
+
+    // Clean up existing listener
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+    }
+
+    // Create real-time listener for conversations
+    unsubscribeRef.current = chatAPI.listenToConversations(
+      currentUserId,
+      (newConversations) => {
+        console.log("📋 Conversations updated:", newConversations.length);
+        setConversations(newConversations);
+      }
+    );
+  }, [currentUserId, isIdle]);
 
   // Load conversations
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     try {
       setIsLoading(true);
       console.log("🔍 Loading conversations for user:", currentUserId);
@@ -56,7 +110,7 @@ export default function ConversationList({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentUserId, toast]);
 
   // Format timestamp for last message
   const formatLastMessageTime = (timestamp: any) => {
@@ -121,24 +175,46 @@ export default function ConversationList({
     );
   });
 
+  // Initialize conversation list
   useEffect(() => {
     loadConversations();
-  }, [currentUserId]);
+    setupConversationListener();
+    updateActivity(); // Start activity tracking
 
-  // Set up real-time listener for conversations (cost-effective)
-  useEffect(() => {
-    if (!currentUserId) return;
-
-    // Create real-time listener for conversations
-    const unsubscribe = chatAPI.listenToConversations(
-      currentUserId,
-      (newConversations) => {
-        setConversations(newConversations);
+    // Cleanup function
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
       }
-    );
-
-    return () => unsubscribe();
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+      }
+    };
   }, [currentUserId]);
+
+  // Activity tracking effects
+  useEffect(() => {
+    const handleActivity = () => updateActivity();
+
+    // Track user activity
+    const events = [
+      "mousedown",
+      "mousemove",
+      "keypress",
+      "scroll",
+      "touchstart",
+      "click",
+    ];
+    events.forEach((event) => {
+      document.addEventListener(event, handleActivity, true);
+    });
+
+    return () => {
+      events.forEach((event) => {
+        document.removeEventListener(event, handleActivity, true);
+      });
+    };
+  }, [updateActivity]);
 
   // Auto-select conversation from URL parameter
   useEffect(() => {
@@ -188,12 +264,20 @@ export default function ConversationList({
             {isLoading && conversations.length > 0 && (
               <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400 ml-2" />
             )}
+            {isIdle && (
+              <Badge variant="outline" className="text-xs text-gray-500 ml-2">
+                Idle
+              </Badge>
+            )}
           </CardTitle>
           {onStartNewConversation && (
             <Button
               variant="outline"
               size="sm"
-              onClick={onStartNewConversation}
+              onClick={() => {
+                updateActivity();
+                onStartNewConversation();
+              }}
             >
               <Plus className="h-4 w-4" />
             </Button>
@@ -206,7 +290,10 @@ export default function ConversationList({
           <Input
             placeholder="Search conversations..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              updateActivity();
+            }}
             className="pl-9"
           />
         </div>
@@ -249,7 +336,10 @@ export default function ConversationList({
                     className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
                       isSelected ? "bg-red-50 border-r-2 border-red-600" : ""
                     }`}
-                    onClick={() => onSelectConversation(conversation)}
+                    onClick={() => {
+                      updateActivity();
+                      onSelectConversation(conversation);
+                    }}
                   >
                     <div className="flex items-start space-x-3">
                       <Avatar className="h-10 w-10">

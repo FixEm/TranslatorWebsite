@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,6 +71,7 @@ export default function ClientDashboard() {
   const [activeTab, setActiveTab] = useState("verification");
   const [, setLocation] = useLocation();
   const searchParams = useSearchParams();
+  const lastManualTabChange = useRef<string | null>(null);
 
   // Chat state
   const [selectedConversation, setSelectedConversation] =
@@ -96,7 +97,22 @@ export default function ClientDashboard() {
     { title: "Dompet", icon: Wallet, key: "wallet" },
   ];
 
-  const handleTabChange = (key: string) => setActiveTab(key);
+  const handleTabChange = (key: string) => {
+    console.log("👆 Manual tab change to:", key);
+    lastManualTabChange.current = key;
+    setActiveTab(key);
+
+    // Update URL to reflect the new tab
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", key);
+
+    // Clear conversation parameter if switching to non-chat tabs
+    if (key !== "chat") {
+      url.searchParams.delete("conversation");
+    }
+
+    window.history.pushState({}, "", url.toString());
+  };
 
   // Handle URL query parameters for tab navigation
   useEffect(() => {
@@ -118,11 +134,29 @@ export default function ClientDashboard() {
       };
 
       const mappedTab = tabMapping[tabParam];
-      if (mappedTab) {
-        console.log("✅ Setting active tab to:", mappedTab);
-        setActiveTab(mappedTab);
-      } else {
+      if (mappedTab && mappedTab !== activeTab) {
+        // Only update if this wasn't a manual tab change
+        if (lastManualTabChange.current !== mappedTab) {
+          console.log("✅ Setting active tab to:", mappedTab, "(from URL)");
+          setActiveTab(mappedTab);
+        } else {
+          console.log(
+            "🔄 Ignoring URL change for manual tab selection:",
+            mappedTab
+          );
+          lastManualTabChange.current = null; // Reset the ref
+        }
+      } else if (!mappedTab) {
         console.log("❌ No mapping found for tab:", tabParam);
+      }
+    } else {
+      // If no tab parameter, default to verification tab (but only if not manually set)
+      if (
+        activeTab !== "verification" &&
+        lastManualTabChange.current !== "verification"
+      ) {
+        console.log("🔄 No tab parameter found, defaulting to verification");
+        setActiveTab("verification");
       }
     }
   }, [searchParams]);
@@ -260,7 +294,7 @@ export default function ClientDashboard() {
                           activeTab === item.key
                             ? "relative bg-red-50 text-red-700"
                             : ""
-                        } group hover:!bg-red-50 hover:!text-red-700`}
+                        } group hover:!bg-red-50 hover:!text-red-700 active:!text-red-700 data-[active=true]:!bg-red-50 data-[active=true]:!text-red-700`}
                       >
                         <item.icon
                           className={`${
@@ -271,7 +305,7 @@ export default function ClientDashboard() {
                         />
                         <span>{item.title}</span>
                         {activeTab === item.key && (
-                          <span className="absolute left-0 top-0 h-full w-1 bg-red-600 rounded-r" />
+                          <span className="absolute left-0 top-0 h-full w-1 bg-red-600 text-red-700 rounded-r" />
                         )}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -285,7 +319,7 @@ export default function ClientDashboard() {
               variant="outline"
               size="sm"
               onClick={() => setLocation("/edit-profile")}
-              className="w-full mb-2"
+              className="w-full mb-2 hover:bg-red-50 hover:text-red-700 active:text-red-700"
             >
               <User className="h-4 w-4 mr-2" />
               Edit Profile
@@ -297,7 +331,7 @@ export default function ClientDashboard() {
                 logout();
                 setLocation("/");
               }}
-              className="w-full"
+              className="w-full hover:bg-red-700 hover:text-white active:text-red-700"
             >
               <LogOut className="h-4 w-4 mr-2" />
               Keluar

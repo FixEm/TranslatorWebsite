@@ -242,19 +242,31 @@ router.get('/conversations/:conversationId/messages/stream', async (req, res) =>
   });
 
   let lastMessageCount = 0;
+  let lastMessageHash = '';
+  let isConnected = true;
   
   // Function to send updates
   const sendUpdate = async () => {
+    if (!isConnected) return;
+    
     try {
       const messages = await storage.getMessages(conversationId);
       
-      // Only send if there are new messages
-      if (messages.length > lastMessageCount) {
+      // Create a simple hash of the messages to detect changes
+      const messageHash = JSON.stringify(messages.map(m => ({ id: m.id, content: m.content, createdAt: m.createdAt })));
+      
+      // Only send if there are actual changes (new messages or content changes)
+      if (messages.length !== lastMessageCount || messageHash !== lastMessageHash) {
+        console.log(`📨 SSE: Sending ${messages.length} messages for conversation ${conversationId}`);
         res.write(`data: ${JSON.stringify(messages)}\n\n`);
         lastMessageCount = messages.length;
+        lastMessageHash = messageHash;
+      } else {
+        console.log(`💤 SSE: No changes for conversation ${conversationId}, skipping update`);
       }
     } catch (error) {
       console.error('Error in SSE message stream:', error);
+      // Don't close connection on error, just log it
     }
   };
 
@@ -262,10 +274,19 @@ router.get('/conversations/:conversationId/messages/stream', async (req, res) =>
   await sendUpdate();
 
   // Set up interval for updates (much less frequent than polling)
-  const interval = setInterval(sendUpdate, 10000); // Every 10 seconds
+  const interval = setInterval(sendUpdate, 15000); // Every 15 seconds (increased from 10)
 
   // Clean up on client disconnect
   req.on('close', () => {
+    console.log(`🔌 SSE: Client disconnected from conversation ${conversationId}`);
+    isConnected = false;
+    clearInterval(interval);
+  });
+
+  // Handle connection errors
+  req.on('error', (error) => {
+    console.error(`❌ SSE: Error in conversation ${conversationId} stream:`, error);
+    isConnected = false;
     clearInterval(interval);
   });
 });
@@ -284,19 +305,35 @@ router.get('/conversations/:userId/stream', async (req, res) => {
   });
 
   let lastConversationCount = 0;
+  let lastConversationHash = '';
+  let isConnected = true;
   
   // Function to send updates
   const sendUpdate = async () => {
+    if (!isConnected) return;
+    
     try {
       const conversations = await storage.getConversations(userId);
       
-      // Only send if there are changes
-      if (conversations.length !== lastConversationCount) {
+      // Create a simple hash of the conversations to detect changes
+      const conversationHash = JSON.stringify(conversations.map(c => ({ 
+        id: c.id, 
+        lastMessageAt: c.lastMessageAt,
+        unreadCount: c.unreadCount 
+      })));
+      
+      // Only send if there are actual changes
+      if (conversations.length !== lastConversationCount || conversationHash !== lastConversationHash) {
+        console.log(`📋 SSE: Sending ${conversations.length} conversations for user ${userId}`);
         res.write(`data: ${JSON.stringify(conversations)}\n\n`);
         lastConversationCount = conversations.length;
+        lastConversationHash = conversationHash;
+      } else {
+        console.log(`💤 SSE: No changes for user ${userId} conversations, skipping update`);
       }
     } catch (error) {
       console.error('Error in SSE conversation stream:', error);
+      // Don't close connection on error, just log it
     }
   };
 
@@ -304,10 +341,19 @@ router.get('/conversations/:userId/stream', async (req, res) => {
   await sendUpdate();
 
   // Set up interval for updates (much less frequent than polling)
-  const interval = setInterval(sendUpdate, 30000); // Every 30 seconds
+  const interval = setInterval(sendUpdate, 45000); // Every 45 seconds (increased from 30)
 
   // Clean up on client disconnect
   req.on('close', () => {
+    console.log(`🔌 SSE: Client disconnected from user ${userId} conversations`);
+    isConnected = false;
+    clearInterval(interval);
+  });
+
+  // Handle connection errors
+  req.on('error', (error) => {
+    console.error(`❌ SSE: Error in user ${userId} conversations stream:`, error);
+    isConnected = false;
     clearInterval(interval);
   });
 });

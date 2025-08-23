@@ -1461,7 +1461,7 @@ export default function TranslatorDashboard() {
               variant="outline"
               size="sm"
               onClick={() => setLocation("/edit-profile")}
-              className="w-full mb-2"
+              className="w-full mb-2 hover:bg-red-50 hover:text-red-700 active:text-red-700"
             >
               <User className="h-4 w-4 mr-2" />
               Edit Profile
@@ -1470,7 +1470,7 @@ export default function TranslatorDashboard() {
               variant="outline"
               size="sm"
               onClick={handleLogout}
-              className="w-full"
+              className="w-full hover:bg-red-700 hover:text-white active:text-red-700"
             >
               <LogOut className="h-4 w-4 mr-2" />
               Keluar
