@@ -1,13 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent } from './ui/card';
-import { Button } from './ui/button';
-import { Switch } from './ui/switch';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Textarea } from './ui/textarea';
-import { useToast } from '../hooks/use-toast';
-import { Calendar, Clock, User, DollarSign, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { Card, CardContent } from "./ui/card";
+import { Button } from "./ui/button";
+import { Switch } from "./ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
+import { useToast } from "../hooks/use-toast";
+import { useAuth } from "../contexts/auth-context";
+import { Calendar, Clock, User, DollarSign, CheckCircle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 interface AvailableDate {
   date: string;
@@ -31,6 +39,7 @@ interface BookableCalendarProps {
 
 interface BookingData {
   date: string;
+  clientUserId?: string;
   clientName: string;
   clientEmail: string;
   clientPhone: string;
@@ -38,46 +47,68 @@ interface BookingData {
   serviceType: string;
 }
 
-const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+const dayNames = [
+  "Minggu",
+  "Senin",
+  "Selasa",
+  "Rabu",
+  "Kamis",
+  "Jumat",
+  "Sabtu",
+];
 
 // Helper function to get current date in UTC+7
 const getCurrentDateUTC7 = () => {
   const now = new Date();
-  // If we're already in UTC+7 timezone, just return the current date
-  // If we need to convert from a different timezone, we should use proper timezone conversion
-  // For now, let's use the local date to avoid the offset issue
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // Create a proper UTC+7 date
+  const utc7Offset = 7 * 60; // UTC+7 in minutes
+  const localOffset = now.getTimezoneOffset(); // Local timezone offset in minutes
+  const utc7Time = now.getTime() + (localOffset + utc7Offset) * 60 * 1000;
+  return new Date(utc7Time);
 };
 
 // Helper function to format date to YYYY-MM-DD in UTC+7
 const formatDateUTC7 = (date: Date) => {
-  // Use local date formatting to avoid timezone offset issues
+  // Ensure we format the date correctly without timezone shifts
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
 
-// Helper function to parse date string and convert to UTC+7
+// Helper function to parse date string safely without timezone issues
 const parseDateUTC7 = (dateStr: string) => {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  // Create date in local timezone to avoid offset issues
-  return new Date(year, month - 1, day); // month is 0-indexed
+  const [year, month, day] = dateStr.split("-").map(Number);
+  // Create date at noon to avoid timezone shift issues
+  return new Date(year, month - 1, day, 12, 0, 0); // month is 0-indexed, set time to noon
 };
 
-export default function BookableCalendar({ 
-  userId, 
+export default function BookableCalendar({
+  userId,
   providerName,
-  initialAvailability, 
-  pricePerDay 
+  initialAvailability,
+  pricePerDay,
 }: BookableCalendarProps) {
+  const { user } = useAuth();
   const { toast } = useToast();
+
+  // Fetch client application data for auto-filling
+  const { data: clientData } = useQuery({
+    queryKey: ["/api/applications/client", user?.uid],
+    queryFn: async () => {
+      if (!user?.uid) return null;
+      const response = await fetch(`/api/applications/client/${user.uid}`);
+      if (!response.ok) throw new Error("Failed to fetch client data");
+      return response.json();
+    },
+    enabled: !!user?.uid,
+  });
   const [availability, setAvailability] = useState<AvailabilityData>({
     isAvailable: true,
     schedule: [],
     recurringPatterns: [],
     unavailablePeriods: [],
-    lastUpdated: new Date()
+    lastUpdated: new Date(),
   });
 
   const [selectedMonth, setSelectedMonth] = useState<Date>(() => {
@@ -86,24 +117,41 @@ export default function BookableCalendar({
   });
 
   const [showBookingDialog, setShowBookingDialog] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<string>("");
   const [multiDayMode, setMultiDayMode] = useState(false);
-  const [rangeStart, setRangeStart] = useState<string>('');
-  const [rangeEnd, setRangeEnd] = useState<string>('');
+  const [rangeStart, setRangeStart] = useState<string>("");
+  const [rangeEnd, setRangeEnd] = useState<string>("");
   const [bookingData, setBookingData] = useState<BookingData>({
-    date: '',
-    clientName: '',
-    clientEmail: '',
-    clientPhone: '',
-    message: '',
-    serviceType: 'translation'
+    date: "",
+    clientUserId: user?.uid || "",
+    clientName: user?.name || "",
+    clientEmail: user?.email || "",
+    clientPhone: "",
+    message: "",
+    serviceType: "translation",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Update booking data when client data is loaded
+  useEffect(() => {
+    if (clientData && user) {
+      setBookingData((prev) => ({
+        ...prev,
+        clientUserId: user.uid,
+        clientName: clientData.name || user.name || "",
+        clientEmail: clientData.email || user.email || "",
+        clientPhone: clientData.whatsapp || "",
+      }));
+    }
+  }, [clientData, user]);
 
   // Initialize availability from props
   useEffect(() => {
     if (initialAvailability) {
-      console.log('BookableCalendar: Received initialAvailability:', initialAvailability);
+      console.log(
+        "BookableCalendar: Received initialAvailability:",
+        initialAvailability
+      );
       setAvailability(initialAvailability);
     }
   }, [initialAvailability]);
@@ -113,7 +161,7 @@ export default function BookableCalendar({
     const dates = [];
     const year = monthStart.getFullYear();
     const month = monthStart.getMonth();
-    
+
     // Get first day of month and its day of week
     const firstDay = new Date(year, month, 1);
     const startDate = new Date(firstDay);
@@ -121,14 +169,14 @@ export default function BookableCalendar({
 
     // Generate 6 weeks (42 days) to fill the calendar grid
     for (let i = 0; i < 42; i++) {
-      const date = new Date(startDate.getTime() + (i * 24 * 60 * 60 * 1000)); // Add days properly
+      const date = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000); // Add days properly
       dates.push({
         date,
         isCurrentMonth: date.getMonth() === month,
-        isToday: date.toDateString() === getCurrentDateUTC7().toDateString()
+        isToday: date.toDateString() === getCurrentDateUTC7().toDateString(),
       });
     }
-    
+
     return dates;
   };
 
@@ -138,23 +186,23 @@ export default function BookableCalendar({
 
   // Check if date is available
   const isDateAvailable = (date: string) => {
-    console.log('Checking availability for date:', date);
-    console.log('Available dates:', availability.schedule);
-    
+    console.log("Checking availability for date:", date);
+    console.log("Available dates:", availability.schedule);
+
     // Try to find the date in the schedule
-    let availableDate = availability.schedule.find(d => d.date === date);
-    
+    let availableDate = availability.schedule.find((d) => d.date === date);
+
     // If not found, try to find by parsing the date differently
     if (!availableDate) {
-      availableDate = availability.schedule.find(d => {
+      availableDate = availability.schedule.find((d) => {
         const scheduleDate = new Date(d.date);
         const checkDate = new Date(date);
         return scheduleDate.toDateString() === checkDate.toDateString();
       });
     }
-    
+
     const isAvailable = availableDate?.isAvailable || false;
-    console.log('Date available:', isAvailable, 'Found date:', availableDate);
+    console.log("Date available:", isAvailable, "Found date:", availableDate);
     return isAvailable;
   };
 
@@ -166,8 +214,10 @@ export default function BookableCalendar({
     const d = new Date(dateStr);
     const s = new Date(rangeStart);
     const e = new Date(rangeEnd);
-    return d >= new Date(s.getFullYear(), s.getMonth(), s.getDate()) &&
-           d <= new Date(e.getFullYear(), e.getMonth(), e.getDate());
+    return (
+      d >= new Date(s.getFullYear(), s.getMonth(), s.getDate()) &&
+      d <= new Date(e.getFullYear(), e.getMonth(), e.getDate())
+    );
   };
 
   const enumerateDates = (startStr: string, endStr: string): string[] => {
@@ -184,7 +234,7 @@ export default function BookableCalendar({
     }
     return out;
   };
-  
+
   // Fetch booked dates for this provider (uses provider calendar cache)
   useEffect(() => {
     const fetchBookedDates = async () => {
@@ -192,13 +242,17 @@ export default function BookableCalendar({
         const calRes = await fetch(`/api/provider-calendars/${userId}`);
         if (calRes.ok) {
           const calendar = await calRes.json();
-          const unavailable = Array.isArray(calendar?.unavailableDates) ? calendar.unavailableDates : [];
+          const unavailable = Array.isArray(calendar?.unavailableDates)
+            ? calendar.unavailableDates
+            : [];
           setBookedDates(unavailable);
-          console.log('Fetched unavailable dates (cache):', unavailable);
+          console.log("Fetched unavailable dates (cache):", unavailable);
           return;
         }
       } catch (err) {
-        console.warn('Provider calendar fetch failed, falling back to bookings endpoint');
+        console.warn(
+          "Provider calendar fetch failed, falling back to bookings endpoint"
+        );
       }
       // Fallback: query bookings and derive booked dates
       try {
@@ -215,10 +269,10 @@ export default function BookableCalendar({
           });
           const unique = Array.from(new Set(dates));
           setBookedDates(unique);
-          console.log('Fetched booked dates (fallback):', unique);
+          console.log("Fetched booked dates (fallback):", unique);
         }
       } catch (error) {
-        console.error('Error fetching booked dates:', error);
+        console.error("Error fetching booked dates:", error);
       }
     };
 
@@ -236,7 +290,7 @@ export default function BookableCalendar({
     }
     if (!multiDayMode) {
       setSelectedDate(dateStr);
-      setBookingData(prev => ({ ...prev, date: dateStr }));
+      setBookingData((prev) => ({ ...prev, date: dateStr }));
       setShowBookingDialog(true);
       return;
     }
@@ -244,7 +298,7 @@ export default function BookableCalendar({
     if (!rangeStart || (rangeStart && rangeEnd)) {
       // Start a new range
       setRangeStart(dateStr);
-      setRangeEnd('');
+      setRangeEnd("");
       setSelectedDate(dateStr);
       return;
     }
@@ -254,105 +308,145 @@ export default function BookableCalendar({
     if (end < start) {
       // If clicked before start, reset start
       setRangeStart(dateStr);
-      setRangeEnd('');
+      setRangeEnd("");
       setSelectedDate(dateStr);
       return;
     }
     // Validate that all dates in the range are selectable
     const days = enumerateDates(rangeStart, dateStr);
-    const hasBlocked = days.some(d => !isDateAvailable(d) || isDateBooked(d));
+    const hasBlocked = days.some((d) => !isDateAvailable(d) || isDateBooked(d));
     if (hasBlocked) {
       // Keep start, ignore invalid end
       return;
     }
     setRangeEnd(dateStr);
-    setSelectedDate(rangeStart + ' → ' + dateStr);
+    setSelectedDate(rangeStart + " → " + dateStr);
     setShowBookingDialog(true);
   };
 
   // Submit booking
   const handleBookingSubmit = async () => {
-    if (!bookingData.clientName || !bookingData.clientEmail || !bookingData.clientPhone) {
+    if (!user) {
       toast({
-        title: "Data Tidak Lengkap",
-        description: "Harap isi semua field yang wajib diisi.",
-        variant: "destructive"
+        title: "Login Required",
+        description: "Please log in to make a booking.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if we're still loading client data
+    if (!clientData) {
+      toast({
+        title: "Loading Profile",
+        description: "Please wait while we load your profile information.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Auto-fill any missing data from client profile
+    const finalBookingData = {
+      ...bookingData,
+      clientName: bookingData.clientName || clientData.name || user.name || "",
+      clientEmail:
+        bookingData.clientEmail || clientData.email || user.email || "",
+      clientPhone: bookingData.clientPhone || clientData.whatsapp || "",
+    };
+
+    if (
+      !finalBookingData.clientName ||
+      !finalBookingData.clientEmail ||
+      !finalBookingData.clientPhone
+    ) {
+      toast({
+        title: "Profil Tidak Lengkap",
+        description:
+          "Harap lengkapi profil Anda terlebih dahulu di halaman dashboard.",
+        variant: "destructive",
       });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/bookings', {
-        method: 'POST',
+      const response = await fetch("/api/bookings", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ...bookingData,
+          ...finalBookingData,
+          clientUserId: user.uid,
           providerId: userId,
           providerName,
           pricePerDay: parseInt(pricePerDay),
-          status: 'pending',
+          status: "pending",
           ...(multiDayMode && rangeStart && rangeEnd
             ? { dateRange: [rangeStart, rangeEnd] }
-            : { date: bookingData.date })
+            : { date: finalBookingData.date }),
         }),
       });
 
       if (response.ok) {
         const booking = await response.json();
-        
+
         // Update booked dates locally (or refresh cache)
         if (multiDayMode && rangeStart && rangeEnd) {
           const days = enumerateDates(rangeStart, rangeEnd);
-          setBookedDates(prev => Array.from(new Set([...prev, ...days])));
-        } else if (bookingData.date) {
-          setBookedDates(prev => [...prev, bookingData.date]);
+          setBookedDates((prev) => Array.from(new Set([...prev, ...days])));
+        } else if (finalBookingData.date) {
+          setBookedDates((prev) => [...prev, finalBookingData.date]);
         }
-        
+
         toast({
           title: "Booking Berhasil!",
-          description: multiDayMode ? "Permintaan booking multi-hari telah terkirim." : "Permintaan booking Anda telah terkirim.",
+          description: multiDayMode
+            ? "Permintaan booking multi-hari telah terkirim."
+            : "Permintaan booking Anda telah terkirim.",
         });
 
         // Reset form and close dialog
         setBookingData({
-          date: '',
-          clientName: '',
-          clientEmail: '',
-          clientPhone: '',
-          message: '',
-          serviceType: 'translation'
+          date: "",
+          clientName: "",
+          clientEmail: "",
+          clientPhone: "",
+          message: "",
+          serviceType: "translation",
         });
         setShowBookingDialog(false);
-        setSelectedDate('');
-        setRangeStart('');
-        setRangeEnd('');
+        setSelectedDate("");
+        setRangeStart("");
+        setRangeEnd("");
       } else if (response.status === 409) {
         toast({
           title: "Tanggal tidak tersedia",
-          description: "Tanggal yang dipilih baru saja dibooking. Silakan pilih tanggal lain.",
-          variant: "destructive"
+          description:
+            "Tanggal yang dipilih baru saja dibooking. Silakan pilih tanggal lain.",
+          variant: "destructive",
         });
         // Refresh booked dates from cache
         try {
           const calRes = await fetch(`/api/provider-calendars/${userId}`);
           if (calRes.ok) {
             const calendar = await calRes.json();
-            const unavailable = Array.isArray(calendar?.unavailableDates) ? calendar.unavailableDates : [];
+            const unavailable = Array.isArray(calendar?.unavailableDates)
+              ? calendar.unavailableDates
+              : [];
             setBookedDates(unavailable);
           }
         } catch {}
       } else {
-        throw new Error('Failed to create booking');
+        throw new Error("Failed to create booking");
       }
     } catch (error) {
-      console.error('Error creating booking:', error);
+      console.error("Error creating booking:", error);
       toast({
         title: "Booking Gagal",
-        description: "Terjadi kesalahan saat membuat booking. Silakan coba lagi.",
-        variant: "destructive"
+        description:
+          "Terjadi kesalahan saat membuat booking. Silakan coba lagi.",
+        variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
@@ -361,11 +455,15 @@ export default function BookableCalendar({
 
   // Navigation
   const goToPreviousMonth = () => {
-    setSelectedMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    setSelectedMonth(
+      (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+    );
   };
 
   const goToNextMonth = () => {
-    setSelectedMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    setSelectedMonth(
+      (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+    );
   };
 
   const goToThisMonth = () => {
@@ -378,13 +476,28 @@ export default function BookableCalendar({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={goToPreviousMonth} className='hover:bg-red-700'>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goToPreviousMonth}
+            className="hover:bg-red-700"
+          >
             ← Bulan Lalu
           </Button>
-          <Button variant="outline" size="sm" onClick={goToThisMonth} className='hover:bg-red-700'>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goToThisMonth}
+            className="hover:bg-red-700"
+          >
             Bulan Ini
           </Button>
-          <Button variant="outline" size="sm" onClick={goToNextMonth} className='hover:bg-red-700'>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goToNextMonth}
+            className="hover:bg-red-700"
+          >
             Bulan Depan →
           </Button>
         </div>
@@ -395,26 +508,27 @@ export default function BookableCalendar({
       </div>
 
       <p className="text-sm text-gray-600 mb-4">
-        {currentMonth.toLocaleDateString('id-ID', { 
-          year: 'numeric', 
-          month: 'long',
-          timeZone: 'Asia/Jakarta'
+        {currentMonth.toLocaleDateString("id-ID", {
+          year: "numeric",
+          month: "long",
         })}
       </p>
 
       {/* Calendar Grid */}
       <div className="max-w-md mx-auto">
         <h3 className="text-lg font-semibold mb-4 text-center">
-          {currentMonth.toLocaleDateString('id-ID', { 
-            year: 'numeric', 
-            month: 'long',
-            timeZone: 'Asia/Jakarta'
+          {currentMonth.toLocaleDateString("id-ID", {
+            year: "numeric",
+            month: "long",
           })}
         </h3>
         <div className="grid grid-cols-7 gap-2 text-sm">
           {/* Header - Days of week */}
           {dayNames.map((day) => (
-            <div key={day} className="font-semibold p-2 text-center text-gray-600">
+            <div
+              key={day}
+              className="font-semibold p-2 text-center text-gray-600"
+            >
               {day.slice(0, 3)}
             </div>
           ))}
@@ -425,48 +539,68 @@ export default function BookableCalendar({
             const isAvailable = isDateAvailable(dateStr);
             const isBooked = isDateBooked(dateStr);
             const inRange = isWithinRange(dateStr);
-            const isRangeStart = multiDayMode && rangeStart && dateStr === rangeStart;
+            const isRangeStart =
+              multiDayMode && rangeStart && dateStr === rangeStart;
             const isRangeEnd = multiDayMode && rangeEnd && dateStr === rangeEnd;
-            const isPast = date < new Date(getCurrentDateUTC7().setHours(0, 0, 0, 0));
-            
+            const isPast =
+              date < new Date(getCurrentDateUTC7().setHours(0, 0, 0, 0));
+
             return (
               <button
                 key={index}
                 className={`
                   p-3 border rounded-lg transition-all duration-200 min-h-[48px] flex items-center justify-center
-                  ${!isCurrentMonth 
-                    ? 'text-gray-300 bg-gray-50 cursor-default' 
-                    : isPast
-                      ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                  ${
+                    !isCurrentMonth
+                      ? "text-gray-300 bg-gray-50 cursor-default"
+                      : isPast
+                      ? "text-gray-400 bg-gray-100 cursor-not-allowed"
                       : isBooked
-                        ? 'bg-red-100 border-red-300 text-red-700 cursor-not-allowed'
-                        : inRange || isRangeStart || isRangeEnd
-                          ? 'bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200 cursor-pointer'
-                          : isAvailable 
-                            ? 'bg-green-100 border-green-300 text-green-800 hover:bg-green-200 cursor-pointer' 
-                            : 'bg-white border-gray-200 text-gray-400 cursor-not-allowed'
+                      ? "bg-red-100 border-red-300 text-red-700 cursor-not-allowed"
+                      : inRange || isRangeStart || isRangeEnd
+                      ? "bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200 cursor-pointer"
+                      : isAvailable
+                      ? "bg-green-100 border-green-300 text-green-800 hover:bg-green-200 cursor-pointer"
+                      : "bg-white border-gray-200 text-gray-400 cursor-not-allowed"
                   }
-                  ${isToday ? 'ring-2 ring-blue-400' : ''}
+                  ${isToday ? "ring-2 ring-blue-400" : ""}
                 `}
-                onClick={() => 
-                  isCurrentMonth && !isPast && (isAvailable || (multiDayMode && !isBooked)) && !isBooked && handleDateClick(dateStr)
+                onClick={() =>
+                  isCurrentMonth &&
+                  !isPast &&
+                  (isAvailable || (multiDayMode && !isBooked)) &&
+                  !isBooked &&
+                  handleDateClick(dateStr)
                 }
-                disabled={!isCurrentMonth || isPast || isBooked || (!isAvailable && !multiDayMode)}
+                disabled={
+                  !isCurrentMonth ||
+                  isPast ||
+                  isBooked ||
+                  (!isAvailable && !multiDayMode)
+                }
                 title={
-                  isBooked 
-                    ? 'Sudah dibooking' 
+                  isBooked
+                    ? "Sudah dibooking"
                     : multiDayMode
-                      ? (isAvailable ? 'Klik untuk memilih rentang tanggal' : 'Tidak tersedia')
-                      : (isAvailable ? 'Tersedia - Klik untuk booking' : 'Tidak tersedia')
+                    ? isAvailable
+                      ? "Klik untuk memilih rentang tanggal"
+                      : "Tidak tersedia"
+                    : isAvailable
+                    ? "Tersedia - Klik untuk booking"
+                    : "Tidak tersedia"
                 }
               >
                 <div className="text-center">
-                  <div className={`${isToday ? 'font-bold' : ''}`}>
+                  <div className={`${isToday ? "font-bold" : ""}`}>
                     {date.getDate()}
                   </div>
-                  {isAvailable && !isBooked && !inRange && !isRangeStart && !isRangeEnd && (
-                    <div className="w-2 h-2 bg-green-500 rounded-full mx-auto mt-1"></div>
-                  )}
+                  {isAvailable &&
+                    !isBooked &&
+                    !inRange &&
+                    !isRangeStart &&
+                    !isRangeEnd && (
+                      <div className="w-2 h-2 bg-green-500 rounded-full mx-auto mt-1"></div>
+                    )}
                   {isBooked && (
                     <div className="w-2 h-2 bg-red-500 rounded-full mx-auto mt-1"></div>
                   )}
@@ -477,9 +611,8 @@ export default function BookableCalendar({
               </button>
             );
           })}
-          </div>
         </div>
-   
+      </div>
 
       {/* Legend */}
       <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t">
@@ -497,7 +630,9 @@ export default function BookableCalendar({
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-gray-100 border border-gray-200 rounded"></div>
-          <span className="text-sm text-gray-600">Masa lalu / Tidak tersedia</span>
+          <span className="text-sm text-gray-600">
+            Masa lalu / Tidak tersedia
+          </span>
         </div>
       </div>
 
@@ -507,42 +642,57 @@ export default function BookableCalendar({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              {multiDayMode ? `Book ${providerName} (Multi-hari)` : `Book ${providerName}`}
+              {multiDayMode
+                ? `Book ${providerName} (Multi-hari)`
+                : `Book ${providerName}`}
             </DialogTitle>
             <DialogDescription>
               {multiDayMode ? (
                 <>
-                  Pilih rentang tanggal: {rangeStart} → {rangeEnd} ({(() => {
-                    const days = rangeStart && rangeEnd ? enumerateDates(rangeStart, rangeEnd).length : 0;
+                  Pilih rentang tanggal: {rangeStart} → {rangeEnd} (
+                  {(() => {
+                    const days =
+                      rangeStart && rangeEnd
+                        ? enumerateDates(rangeStart, rangeEnd).length
+                        : 0;
                     return `${days} hari`;
-                  })()})
+                  })()}
+                  )
                 </>
               ) : (
-                <>Isi form di bawah untuk booking tanggal {selectedDate && (() => {
-                  const parsedDate = parseDateUTC7(selectedDate);
-                  return parsedDate.toLocaleDateString('id-ID', { 
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    timeZone: 'Asia/Jakarta'
-                  });
-                })()}</>
+                <>
+                  Konfirmasi booking untuk tanggal{" "}
+                  {selectedDate &&
+                    (() => {
+                      const parsedDate = parseDateUTC7(selectedDate);
+                      return parsedDate.toLocaleDateString("id-ID", {
+                        weekday: "long",
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      });
+                    })()}
+                </>
               )}
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4">
             {/* Price Display */}
             <div className="bg-blue-50 p-4 rounded-lg flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <DollarSign className="h-5 w-5 text-blue-600" />
-                <span className="font-medium">{multiDayMode && rangeStart && rangeEnd ? 'Total Harga:' : 'Harga per hari:'}</span>
+                <span className="font-medium">
+                  {multiDayMode && rangeStart && rangeEnd
+                    ? "Total Harga:"
+                    : "Harga per hari:"}
+                </span>
               </div>
               <span className="text-xl font-bold text-blue-600">
                 {multiDayMode && rangeStart && rangeEnd
                   ? (() => {
-                      const days = enumerateDates(rangeStart, rangeEnd).length || 1;
+                      const days =
+                        enumerateDates(rangeStart, rangeEnd).length || 1;
                       const total = (parseInt(pricePerDay) || 0) * days;
                       return `Rp ${total.toLocaleString()} (${days} hari)`;
                     })()
@@ -550,59 +700,66 @@ export default function BookableCalendar({
               </span>
             </div>
 
-            {/* Client Information */}
-            <div className="space-y-3">
-              <div>
-                <Label htmlFor="clientName">Nama Lengkap *</Label>
-                <Input
-                  id="clientName"
-                  value={bookingData.clientName}
-                  onChange={(e) => setBookingData(prev => ({ ...prev, clientName: e.target.value }))}
-                  placeholder="Masukkan nama lengkap Anda"
-                />
+            {/* Booking Confirmation */}
+            <div className="space-y-4">
+              {/* Client Information Display */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-medium text-gray-900 mb-3">
+                  Informasi Booking
+                </h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Nama:</span>
+                    <span className="font-medium">
+                      {clientData?.name || user?.name || "Loading..."}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Email:</span>
+                    <span className="font-medium">
+                      {clientData?.email || user?.email || "Loading..."}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">WhatsApp:</span>
+                    <span className="font-medium">
+                      {clientData?.whatsapp || "Not provided"}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <Label htmlFor="clientEmail">Email *</Label>
-                <Input
-                  id="clientEmail"
-                  type="email"
-                  value={bookingData.clientEmail}
-                  onChange={(e) => setBookingData(prev => ({ ...prev, clientEmail: e.target.value }))}
-                  placeholder="contoh@email.com"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="clientPhone">Nomor WhatsApp *</Label>
-                <Input
-                  id="clientPhone"
-                  value={bookingData.clientPhone}
-                  onChange={(e) => setBookingData(prev => ({ ...prev, clientPhone: e.target.value }))}
-                  placeholder="+62 812 3456 7890"
-                />
-              </div>
-
+              {/* Service Type Selection */}
               <div>
                 <Label htmlFor="serviceType">Jenis Layanan</Label>
                 <select
                   id="serviceType"
                   value={bookingData.serviceType}
-                  onChange={(e) => setBookingData(prev => ({ ...prev, serviceType: e.target.value }))}
+                  onChange={(e) =>
+                    setBookingData((prev) => ({
+                      ...prev,
+                      serviceType: e.target.value,
+                    }))
+                  }
                   className="w-full p-2 border border-gray-300 rounded-md"
                 >
                   <option value="translation">Translator</option>
                   <option value="tour_guide">Tour Guide</option>
-            
                 </select>
               </div>
 
+              {/* Optional Message */}
               <div>
                 <Label htmlFor="message">Pesan (Opsional)</Label>
                 <Textarea
                   id="message"
                   value={bookingData.message}
-                  onChange={(e) => setBookingData(prev => ({ ...prev, message: e.target.value }))}
+                  onChange={(e) =>
+                    setBookingData((prev) => ({
+                      ...prev,
+                      message: e.target.value,
+                    }))
+                  }
                   placeholder="Jelaskan kebutuhan Anda secara detail..."
                   rows={3}
                 />
@@ -622,13 +779,17 @@ export default function BookableCalendar({
               <Button
                 onClick={handleBookingSubmit}
                 className="flex-1"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !clientData || !clientData.whatsapp}
               >
                 {isSubmitting ? (
                   <>
                     <Clock className="h-4 w-4 mr-2 animate-spin" />
                     Memproses...
                   </>
+                ) : !clientData ? (
+                  "Loading Profile..."
+                ) : !clientData.whatsapp ? (
+                  "Complete Profile Required"
                 ) : (
                   <>
                     <CheckCircle className="h-4 w-4 mr-2" />
@@ -643,37 +804,40 @@ export default function BookableCalendar({
 
       {/* Last Updated */}
       <div className="text-center text-sm text-gray-500">
-        Terakhir diperbarui: {(() => {
+        Terakhir diperbarui:{" "}
+        {(() => {
           try {
             const lastUpdated = availability.lastUpdated as any;
-            
+
             if (!lastUpdated) {
-              return 'Tidak diketahui';
+              return "Tidak diketahui";
             }
-            
+
             if (lastUpdated instanceof Date) {
-              return lastUpdated.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+              return lastUpdated.toLocaleString("id-ID");
             }
-            
-            if (typeof lastUpdated === 'object' && lastUpdated._seconds) {
+
+            if (typeof lastUpdated === "object" && lastUpdated._seconds) {
               const date = new Date(lastUpdated._seconds * 1000);
-              return date.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+              return date.toLocaleString("id-ID");
             }
-            
-            if (typeof lastUpdated === 'string') {
+
+            if (typeof lastUpdated === "string") {
               const date = new Date(lastUpdated);
-              return isNaN(date.getTime()) ? 'Format tanggal tidak valid' : date.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+              return isNaN(date.getTime())
+                ? "Format tanggal tidak valid"
+                : date.toLocaleString("id-ID");
             }
-            
-            if (typeof lastUpdated === 'number') {
+
+            if (typeof lastUpdated === "number") {
               const date = new Date(lastUpdated);
-              return date.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+              return date.toLocaleString("id-ID");
             }
-            
-            return 'Format tanggal tidak dikenal';
+
+            return "Format tanggal tidak dikenal";
           } catch (error) {
-            console.error('Error formatting lastUpdated:', error);
-            return 'Error format tanggal';
+            console.error("Error formatting lastUpdated:", error);
+            return "Error format tanggal";
           }
         })()}
       </div>

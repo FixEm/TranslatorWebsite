@@ -7,6 +7,7 @@ import path from "path";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import verificationRoutes from "./verification-routes";
+import chatRoutes from "./chat-routes";
 import { auth, getUserByEmail, createUserAndSendVerification, calculateCompletenessScore, isAccountActivated, isReadyForReview } from "./auth";
 import { sendVerificationEmail } from "./email-service";
 
@@ -1217,6 +1218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add verification routes
   app.use("/api", verificationRoutes);
+  app.use("/api/chat", chatRoutes);
 
   // Check email verification status
   app.get("/api/auth/verify-status", async (req, res) => {

@@ -10,6 +10,8 @@ export class FirebaseStorage {
   private jobsCollection = db.collection('jobs');
   private bookingsCollection = db.collection('bookings');
   private providerCalendarsCollection = db.collection('provider_calendars');
+  private conversationsCollection = db.collection('conversations');
+  private messagesCollection = db.collection('messages');
 
   async getUser(id: string): Promise<User | undefined> {
     const doc = await this.usersCollection.doc(id).get();
@@ -1092,6 +1094,250 @@ export class FirebaseStorage {
       unavailableDates: Array.isArray(data.unavailableDates) ? data.unavailableDates : [],
       lastUpdated: data.lastUpdated || new Date()
     };
+  }
+
+  // CHAT: Chat system methods
+  async createConversation(participants: string[], bookingId?: string): Promise<any> {
+    try {
+      console.log(`💬 FirebaseStorage: Creating conversation with participants:`, participants);
+      
+      // Check if conversation already exists between these participants
+      const existingSnapshot = await this.conversationsCollection
+        .where('participants', 'array-contains-any', participants)
+        .get();
+      
+      // Check if any existing conversation has exactly the same participants
+      for (const doc of existingSnapshot.docs) {
+        const data = doc.data();
+        if (data.participants.length === participants.length && 
+            participants.every(p => data.participants.includes(p))) {
+          console.log(`💬 FirebaseStorage: Found existing conversation: ${doc.id}`);
+          return { id: doc.id, ...data };
+        }
+      }
+      
+      const conversationData = {
+        participants,
+        bookingId: bookingId || null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastMessageAt: new Date(),
+        lastMessage: null,
+        unreadCount: participants.reduce((acc, p) => ({ ...acc, [p]: 0 }), {})
+      };
+      
+      const docRef = await this.conversationsCollection.add(conversationData);
+      console.log(`✅ FirebaseStorage: Conversation created: ${docRef.id}`);
+      
+      return { id: docRef.id, ...conversationData };
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error creating conversation:`, error);
+      throw error;
+    }
+  }
+
+  async getConversations(userId: string): Promise<any[]> {
+    try {
+      console.log(`💬 FirebaseStorage: Getting conversations for user: ${userId}`);
+      
+      const snapshot = await this.conversationsCollection
+        .where('participants', 'array-contains', userId)
+        .orderBy('lastMessageAt', 'desc')
+        .get();
+      
+      const conversations = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      console.log(`✅ FirebaseStorage: Found ${conversations.length} conversations for user: ${userId}`);
+      return conversations;
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error getting conversations for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  async getConversation(conversationId: string): Promise<any | undefined> {
+    try {
+      const doc = await this.conversationsCollection.doc(conversationId).get();
+      if (!doc.exists) return undefined;
+      
+      return { id: doc.id, ...doc.data() };
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error getting conversation ${conversationId}:`, error);
+      throw error;
+    }
+  }
+
+  async sendMessage(conversationId: string, senderId: string, content: string, type: 'text' | 'image' | 'file' = 'text'): Promise<any> {
+    try {
+      console.log(`💬 FirebaseStorage: Sending message to conversation: ${conversationId}`);
+      
+      const messageData = {
+        conversationId,
+        senderId,
+        content,
+        type,
+        createdAt: new Date(),
+        readBy: [senderId], // Sender has automatically read the message
+        edited: false,
+        editedAt: null
+      };
+      
+      // Add message to messages collection
+      const messageRef = await this.messagesCollection.add(messageData);
+      
+      // Update conversation with last message info
+      const conversationDoc = await this.conversationsCollection.doc(conversationId).get();
+      if (conversationDoc.exists) {
+        const conversationData = conversationDoc.data();
+        const participants = conversationData?.participants || [];
+        
+        // Update unread count for other participants
+        const newUnreadCount = { ...conversationData?.unreadCount };
+        participants.forEach((participantId: string) => {
+          if (participantId !== senderId) {
+            newUnreadCount[participantId] = (newUnreadCount[participantId] || 0) + 1;
+          }
+        });
+        
+        await this.conversationsCollection.doc(conversationId).update({
+          lastMessage: {
+            id: messageRef.id,
+            content: content.length > 50 ? content.substring(0, 50) + '...' : content,
+            senderId,
+            createdAt: new Date(),
+            type
+          },
+          lastMessageAt: new Date(),
+          updatedAt: new Date(),
+          unreadCount: newUnreadCount
+        });
+      }
+      
+      console.log(`✅ FirebaseStorage: Message sent: ${messageRef.id}`);
+      return { id: messageRef.id, ...messageData };
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error sending message:`, error);
+      throw error;
+    }
+  }
+
+  async getMessages(conversationId: string, limit = 50, lastMessageId?: string): Promise<any[]> {
+    try {
+      console.log(`💬 FirebaseStorage: Getting messages for conversation: ${conversationId}`);
+      
+      let query: any = this.messagesCollection
+        .where('conversationId', '==', conversationId)
+        .orderBy('createdAt', 'desc')
+        .limit(limit);
+      
+      if (lastMessageId) {
+        const lastDoc = await this.messagesCollection.doc(lastMessageId).get();
+        if (lastDoc.exists) {
+          query = query.startAfter(lastDoc);
+        }
+      }
+      
+      const snapshot = await query.get();
+
+      const messages = snapshot.docs.map((doc: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>) => ({
+        id: doc.id,
+        ...doc.data()
+      })).reverse(); // Reverse to show oldest first
+      console.log(`✅ FirebaseStorage: Found ${messages.length} messages for conversation: ${conversationId}`);
+      return messages;
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error getting messages for conversation ${conversationId}:`, error);
+      throw error;
+    }
+  }
+
+  async markMessagesAsRead(conversationId: string, userId: string): Promise<void> {
+    try {
+      console.log(`💬 FirebaseStorage: Marking messages as read for user: ${userId} in conversation: ${conversationId}`);
+      
+      // Get unread messages for this user
+      const messagesSnapshot = await this.messagesCollection
+        .where('conversationId', '==', conversationId)
+        .where('readBy', 'not-in', [[userId], userId])
+        .get();
+      
+      const batch = db.batch();
+      
+      messagesSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        const readBy = Array.isArray(data.readBy) ? data.readBy : [];
+        if (!readBy.includes(userId)) {
+          batch.update(doc.ref, {
+            readBy: [...readBy, userId]
+          });
+        }
+      });
+      
+      // Reset unread count for this user in conversation
+      const conversationRef = this.conversationsCollection.doc(conversationId);
+      const conversationDoc = await conversationRef.get();
+      if (conversationDoc.exists) {
+        const data = conversationDoc.data();
+        const unreadCount = { ...data?.unreadCount };
+        unreadCount[userId] = 0;
+        
+        batch.update(conversationRef, { unreadCount });
+      }
+      
+      await batch.commit();
+      console.log(`✅ FirebaseStorage: Messages marked as read for user: ${userId}`);
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error marking messages as read:`, error);
+      throw error;
+    }
+  }
+
+  async deleteMessage(messageId: string, userId: string): Promise<void> {
+    try {
+      const messageDoc = await this.messagesCollection.doc(messageId).get();
+      if (!messageDoc.exists) {
+        throw new Error('Message not found');
+      }
+      
+      const messageData = messageDoc.data();
+      if (messageData?.senderId !== userId) {
+        throw new Error('You can only delete your own messages');
+      }
+      
+      await this.messagesCollection.doc(messageId).delete();
+      console.log(`✅ FirebaseStorage: Message deleted: ${messageId}`);
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error deleting message:`, error);
+      throw error;
+    }
+  }
+
+  async editMessage(messageId: string, userId: string, newContent: string): Promise<void> {
+    try {
+      const messageDoc = await this.messagesCollection.doc(messageId).get();
+      if (!messageDoc.exists) {
+        throw new Error('Message not found');
+      }
+      
+      const messageData = messageDoc.data();
+      if (messageData?.senderId !== userId) {
+        throw new Error('You can only edit your own messages');
+      }
+      
+      await this.messagesCollection.doc(messageId).update({
+        content: newContent,
+        edited: true,
+        editedAt: new Date()
+      });
+      
+      console.log(`✅ FirebaseStorage: Message edited: ${messageId}`);
+    } catch (error) {
+      console.error(`❌ FirebaseStorage: Error editing message:`, error);
+      throw error;
+    }
   }
 
   // NEW: File upload method

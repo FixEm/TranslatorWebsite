@@ -75,7 +75,7 @@ export default function AdminPage() {
 	const { toast } = useToast();
 	const queryClient = useQueryClient();
 	const [activeTab, setActiveTab] = useState("dashboard");
-	const [sidebarOpen, setSidebarOpen] = useState(false); // Sidebar starts closed
+	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [selectedStudent, setSelectedStudent] = useState<any>(null);
 	const [selectedClient, setSelectedClient] = useState<any>(null);
 	const [bookedDates, setBookedDates] = useState<string[]>([]);
@@ -95,6 +95,60 @@ export default function AdminPage() {
 	const [interviewTime, setInterviewTime] = useState("");
 	const [meetLink, setMeetLink] = useState("");
 	const [selectedProject, setSelectedProject] = useState("");
+
+	// Fetch booked dates for selected student
+	useEffect(() => {
+		const fetchBookedDates = async () => {
+			if (!selectedStudent?.id) {
+				setBookedDates([]);
+				return;
+			}
+
+			try {
+				// Try to fetch from provider calendar cache first
+				const calRes = await fetch(
+					`/api/provider-calendars/${selectedStudent.id}`
+				);
+				if (calRes.ok) {
+					const calendar = await calRes.json();
+					const unavailable = Array.isArray(calendar?.unavailableDates)
+						? calendar.unavailableDates
+						: [];
+					setBookedDates(unavailable);
+					return;
+				}
+			} catch (err) {
+				console.warn(
+					"Provider calendar fetch failed, falling back to bookings endpoint"
+				);
+			}
+
+			// Fallback: query bookings and derive booked dates
+			try {
+				const response = await fetch(
+					`/api/bookings/provider/${selectedStudent.id}`
+				);
+				if (response.ok) {
+					const bookings = await response.json();
+					const dates: string[] = [];
+					bookings.forEach((b: any) => {
+						if (Array.isArray(b.dateRange)) {
+							b.dateRange.forEach((d: string) => dates.push(d));
+						} else if (b.date) {
+							dates.push(b.date);
+						}
+					});
+					const unique = Array.from(new Set(dates));
+					setBookedDates(unique);
+				}
+			} catch (error) {
+				console.error("Error fetching booked dates:", error);
+				setBookedDates([]);
+			}
+		};
+
+		fetchBookedDates();
+	}, [selectedStudent?.id]);
 
 	// Fetch dashboard stats
 	const { data: stats } = useQuery<{
@@ -1003,6 +1057,58 @@ export default function AdminPage() {
 		return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 	};
 
+	// Handle view translator profile from jobs management
+	useEffect(() => {
+		const handleViewTranslatorProfile = (event: CustomEvent) => {
+			const { translatorId } = event.detail;
+
+			// Find the translator in applications
+			const translatorApp = allApplications?.find(
+				(app) => app.id === translatorId
+			);
+
+			if (translatorApp) {
+				// Transform the application to student format
+				const studentData = transformApplicationToStudent(translatorApp);
+
+				// Set the selected student and switch to student pool tab
+				setSelectedStudent(studentData);
+				setActiveTab("student-pool");
+
+				// Clear the sessionStorage
+				sessionStorage.removeItem("viewTranslatorProfile");
+			}
+		};
+
+		// Add event listener
+		window.addEventListener(
+			"viewTranslatorProfile",
+			handleViewTranslatorProfile as EventListener
+		);
+
+		// Check if there's a pending view profile request on component mount
+		const pendingTranslatorId = sessionStorage.getItem("viewTranslatorProfile");
+		if (pendingTranslatorId) {
+			const translatorApp = allApplications?.find(
+				(app) => app.id === pendingTranslatorId
+			);
+			if (translatorApp) {
+				const studentData = transformApplicationToStudent(translatorApp);
+				setSelectedStudent(studentData);
+				setActiveTab("student-pool");
+				sessionStorage.removeItem("viewTranslatorProfile");
+			}
+		}
+
+		// Cleanup
+		return () => {
+			window.removeEventListener(
+				"viewTranslatorProfile",
+				handleViewTranslatorProfile as EventListener
+			);
+		};
+	}, [allApplications]);
+
 	// Helper function to format date to YYYY-MM-DD in UTC+7
 	const formatDateUTC7 = (date: Date) => {
 		// Use local date formatting to avoid timezone offset issues
@@ -1011,7 +1117,7 @@ export default function AdminPage() {
 		const day = String(date.getDate()).padStart(2, "0");
 		return `${year}-${month}-${day}`;
 	};
-	// div className="min-h-screen bg-gray-50 flex overflow-x-hidden"> {/* Added overflow-x-hidden to prevent horizontal overflow */}
+
 	return (
 		<div className="min-h-screen bg-gray-50 flex">
 			{/* Sidebar */}
@@ -1054,7 +1160,9 @@ export default function AdminPage() {
 				</nav>
 			</aside>
 			{/* Main Content */}
-			<main className="flex-1 px-4 sm:px-8 py-8 w-3/4">
+			<main className="flex-1 px-4 sm:px-8 py-8">
+				{/* Mobile sidebar toggle */}
+
 				{activeTab === "recruitment" && (
 					<div className="space-y-6 w-auto">
 						<div className="flex items-center justify-between">
@@ -1456,19 +1564,15 @@ export default function AdminPage() {
 				{activeTab === "verified-users" && (
 					<div className="w-full space-y-6 overflow-hidden">
 						{" "}
-						{/* Adjusted width and added overflow-hidden */}
 						<div className="flex items-center justify-between flex-wrap gap-4">
 							{" "}
-							{/* Added flex-wrap and gap for better responsiveness */}
 							<div>
 								<h1 className="text-3xl font-bold text-navy-800">
 									{" "}
-									{/* Reduced font size */}
 									Verified Users
 								</h1>
 								<p className="text-sm text-gray-600">
 									{" "}
-									{/* Reduced font size */}
 									Manage verified and approved translators/tour guides
 								</p>
 							</div>
@@ -1542,7 +1646,6 @@ export default function AdminPage() {
 									</CardContent>
 								</Card>
 							</div>
-
 							{/* Verified Users Table */}
 							<Card>
 								<CardHeader>
@@ -2232,13 +2335,7 @@ export default function AdminPage() {
 																						// If it's already a Date object
 																						if (lastUpdated instanceof Date) {
 																							return lastUpdated.toLocaleDateString(
-																								"id-ID",
-																								{
-																									day: "numeric",
-																									month: "short",
-																									hour: "2-digit",
-																									minute: "2-digit",
-																								}
+																								"id-ID"
 																							);
 																						}
 
@@ -2359,18 +2456,23 @@ export default function AdminPage() {
 																					const date = new Date(startDate);
 																					date.setDate(startDate.getDate() + i);
 																					const dateStr = formatDateUTC7(date);
-																					dates.push({
-																						date,
-																						isCurrentMonth:
-																							date.getMonth() === month,
-																						isToday:
-																							date.toDateString() ===
-																							today.toDateString(),
-																						isAvailable:
-																							availableDates.includes(dateStr),
-																						isBooked:
-																							bookedDates.includes(dateStr),
-																					});
+
+																					// Only include dates from the current month
+																					if (date.getMonth() === month) {
+																						dates.push({
+																							date,
+																							isCurrentMonth: true,
+																							isToday:
+																								date.toDateString() ===
+																								today.toDateString(),
+																							isAvailable:
+																								availableDates.includes(
+																									dateStr
+																								),
+																							isBooked:
+																								bookedDates.includes(dateStr),
+																						});
+																					}
 																				}
 
 																				return dates;
@@ -2436,11 +2538,9 @@ export default function AdminPage() {
 																										<div
 																											key={index}
 																											className={`
-                                                      p-2 text-center min-h-[40px] flex items-center justify-center transition-all duration-500
+                                                      p-2 text-center min-h-[40px] flex items-center justify-center transition-all duration-200
                                                       ${
-																												!isCurrentMonth
-																													? "text-gray-300"
-																													: isBooked
+																												isBooked
 																													? "bg-red-100 border border-red-300 text-red-800 rounded"
 																													: isAvailable
 																													? "bg-green-100 border border-green-300 text-green-800 rounded"
@@ -2464,14 +2564,12 @@ export default function AdminPage() {
 																													{date.getDate()}
 																												</div>
 																												{isAvailable &&
-																													isCurrentMonth &&
 																													!isBooked && (
 																														<div className="w-1 h-1 bg-green-500 rounded-full mx-auto mt-1"></div>
 																													)}
-																												{isBooked &&
-																													isCurrentMonth && (
-																														<div className="w-1 h-1 bg-red-500 rounded-full mx-auto mt-1"></div>
-																													)}
+																												{isBooked && (
+																													<div className="w-1 h-1 bg-red-500 rounded-full mx-auto mt-1"></div>
+																												)}
 																											</div>
 																										</div>
 																									)
@@ -2518,9 +2616,7 @@ export default function AdminPage() {
 																											className={`
                                                       p-2 text-center min-h-[40px] flex items-center justify-center transition-all duration-200
                                                       ${
-																												!isCurrentMonth
-																													? "text-gray-300"
-																													: isBooked
+																												isBooked
 																													? "bg-red-100 border border-red-300 text-red-800 rounded"
 																													: isAvailable
 																													? "bg-green-100 border border-green-300 text-green-800 rounded"
@@ -2544,14 +2640,12 @@ export default function AdminPage() {
 																													{date.getDate()}
 																												</div>
 																												{isAvailable &&
-																													isCurrentMonth &&
 																													!isBooked && (
 																														<div className="w-1 h-1 bg-green-500 rounded-full mx-auto mt-1"></div>
 																													)}
-																												{isBooked &&
-																													isCurrentMonth && (
-																														<div className="w-1 h-1 bg-red-500 rounded-full mx-auto mt-1"></div>
-																													)}
+																												{isBooked && (
+																													<div className="w-1 h-1 bg-red-500 rounded-full mx-auto mt-1"></div>
+																												)}
 																											</div>
 																										</div>
 																									)
@@ -3164,7 +3258,7 @@ export default function AdminPage() {
 								{/* Type tabs: All / Individu / Travel Agency */}
 								<Card>
 									<CardContent className="p-4">
-										<div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+										<div className="grid grid-cols-3 gap-2">
 											<button
 												onClick={() => setClientTypeFilter("all")}
 												className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
@@ -3319,53 +3413,6 @@ export default function AdminPage() {
 																		>
 																			View Details
 																		</Button>
-																		<DropdownMenu>
-																			<DropdownMenuTrigger asChild>
-																				<Button variant="outline" size="sm">
-																					<Menu className="h-4 w-4" />
-																				</Button>
-																			</DropdownMenuTrigger>
-																			<DropdownMenuContent>
-																				<DropdownMenuItem
-																					onClick={() =>
-																						updateApplicationStatus(
-																							c.id,
-																							"approved"
-																						)
-																					}
-																				>
-																					Approve
-																				</DropdownMenuItem>
-																				<DropdownMenuItem
-																					onClick={() =>
-																						updateApplicationStatus(
-																							c.id,
-																							"rejected"
-																						)
-																					}
-																				>
-																					Reject
-																				</DropdownMenuItem>
-																				<DropdownMenuItem
-																					onClick={() =>
-																						updateApplicationStatus(
-																							c.id,
-																							"pending"
-																						)
-																					}
-																				>
-																					Pending
-																				</DropdownMenuItem>
-																				<DropdownMenuItem
-																					onClick={() => {
-																						setSelectedCandidate(c);
-																						setRequestChangesModalOpen(true);
-																					}}
-																				>
-																					Request Changes
-																				</DropdownMenuItem>
-																			</DropdownMenuContent>
-																		</DropdownMenu>
 																	</div>
 																</td>
 															</tr>
@@ -3750,42 +3797,7 @@ export default function AdminPage() {
 						<p className="text-silver-600 mb-8">
 							Create and manage translation job postings
 						</p>
-						{/* <Card>
-									<CardContent className="p-4">
-										<div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
-											<button
-												onClick={() => setStudentTypeFilter("all")}
-												className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
-													studentTypeFilter === "all"
-														? "bg-white text-purple-600 shadow-sm"
-														: "text-gray-600 hover:text-gray-900"
-												}`}
-											>
-												All Students
-											</button>
-											<button
-												onClick={() => setStudentTypeFilter("translator")}
-												className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
-													studentTypeFilter === "translator"
-														? "bg-white text-purple-600 shadow-sm"
-														: "text-gray-600 hover:text-gray-900"
-												}`}
-											>
-												Translator
-											</button>
-											<button
-												onClick={() => setStudentTypeFilter("tour_guide")}
-												className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
-													studentTypeFilter === "tour_guide"
-														? "bg-white text-purple-600 shadow-sm"
-														: "text-gray-600 hover:text-gray-900"
-												}`}
-											>
-												Tour Guide
-											</button>
-										</div>
-									</CardContent>
-								</Card> */}
+
 						<Tabs defaultValue="create-job" className="w-full">
 							<Card className="bg-white p-4">
 								<TabsList className="grid w-full grid-cols-3 bg-slate-100">
@@ -3796,22 +3808,33 @@ export default function AdminPage() {
 							</Card>
 
 							<TabsContent value="create-job" className="space-y-6">
-								<StudentShowcaseForm
-									verifiedTranslators={verifiedApplications} // Pass list of verified translators
-									onJobCreated={(job: any) => {
-										toast({
-											title: "Student Showcase Created!",
-											description: `Job "${job.title}" has been created and is now visible in the marketplace.`,
-										});
-										// Refresh any job list if needed
-									}}
-								/>
+								<Card>
+									<CardHeader>
+										<CardTitle>Create Student Showcase</CardTitle>
+										<p className="text-gray-600">
+											Create a client-facing showcase for verified student
+											translators
+										</p>
+									</CardHeader>
+									<CardContent>
+										<StudentShowcaseForm
+											verifiedTranslators={verifiedApplications} // Pass list of verified translators
+											onJobCreated={(job: any) => {
+												toast({
+													title: "Student Showcase Created!",
+													description: `Job "${job.title}" has been created and is now visible in the marketplace.`,
+												});
+												// Refresh any job list if needed
+											}}
+										/>
+									</CardContent>
+								</Card>
 							</TabsContent>
 
 							<TabsContent value="manage-jobs" className="space-y-6">
 								<Card className="p-6">
 									<ConfirmedJobsManagement />
-								</Card>
+								</Card>{" "}
 							</TabsContent>
 
 							<TabsContent value="bookings" className="space-y-6">
@@ -3953,6 +3976,7 @@ export default function AdminPage() {
 					</>
 				)}
 			</main>
+
 			{/* Request Changes Modal */}
 			<Dialog
 				open={requestChangesModalOpen}
