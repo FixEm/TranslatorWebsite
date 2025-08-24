@@ -100,6 +100,15 @@ export default function ClientSignup() {
 				});
 				return;
 			}
+			// Validate password length
+			if (application.password && application.password.length < 6) {
+				toast({
+					title: "Error",
+					description: "Password harus memiliki minimal 6 karakter.",
+					variant: "destructive",
+				});
+				return;
+			}
 			const applicationData = {
 				...application,
 				intent: "individu", // Updated to match expected values
@@ -174,15 +183,6 @@ export default function ClientSignup() {
 								<ArrowLeft className="h-4 w-4 mr-2" />
 								Kembali ke Pilihan Peran
 							</Button>
-							{/* <div className="text-center space-y-2">
-								<h1 className="text-2xl font-bold text-navy-800">
-									Kuesioner Pra-Pendaftaran
-								</h1>
-								<p className="text-gray-600">
-									Isi kuesioner ini untuk membantu kami memahami profil dan
-									kebutuhan Anda
-								</p>
-							</div> */}
 						</div>
 						<RoleQuestionnaireClient
 							selectedRole={selectedRole}
