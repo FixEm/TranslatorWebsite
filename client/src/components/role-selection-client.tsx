@@ -37,13 +37,11 @@ export default function RoleSelection({ onRoleSelect }: RoleSelectionProps) {
 			features: [
 				"Terjemahan dokumen pribadi",
 				"Pendampingan wisata",
-				"Interpretasi percakapan",
-				"Konsultasi bahasa",
+				// "Interpretasi percakapan",
 			],
 			requirements: [
 				"Kebutuhan spesifik yang jelas",
 				"Komunikasi yang baik dengan penerjemah",
-				"Ketersediaan waktu fleksibel",
 			],
 			color: "blue",
 		},
@@ -53,14 +51,11 @@ export default function RoleSelection({ onRoleSelect }: RoleSelectionProps) {
 			icon: Globe,
 			description: "Layanan untuk agen perjalanan dalam mendukung wisatawan.",
 			features: [
-				"Panduan wisata grup",
-				"Terjemahan untuk turis",
-				"Pendampingan acara budaya",
+				"Penerjemahan dalam grup wisata",
 				"Koordinasi logistik perjalanan",
 			],
 			requirements: [
 				"Rencana perjalanan yang terorganisir",
-				"Komunikasi yang baik dengan klien",
 				"Pengalaman dalam mengelola grup wisata",
 			],
 			color: "green",
@@ -179,7 +174,7 @@ export default function RoleSelection({ onRoleSelect }: RoleSelectionProps) {
 			</div>
 
 			{selectedRole && (
-				<div className="flex justify-center pt-6">
+				<div className="flex justify-center pt-4">
 					<Button
 						size="lg"
 						onClick={() => onRoleSelect(selectedRole)}

@@ -9,6 +9,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Card } from "./ui/card";
 
 interface ClientQuestionnaireAnswers {
 	company?: string;
@@ -88,8 +89,8 @@ export default function RoleQuestionnaireClient({
 	};
 
 	return (
-		<div className="space-y-8 p-8 bg-gray-50 rounded-lg">
-			<div className=" p-6 rounded-lg shadow-xl">
+		<div className="space-y-8 py-4 bg-gray-50 rounded-lg">
+			<Card className="p-8 rounded-lg shadow-xl space-y-6">
 				<h2 className="text-3xl font-bold text-gray-900 text-center mb-6">
 					Kuesioner Pra-Pendaftaran
 				</h2>
@@ -186,7 +187,7 @@ export default function RoleQuestionnaireClient({
 						</Select>
 					</div>
 				</div>
-			</div>
+			</Card>
 
 			<div className="flex justify-between mt-8">
 				<Button
