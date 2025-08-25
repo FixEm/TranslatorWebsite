@@ -1119,8 +1119,7 @@ export default function AdminPage() {
 	};
 
 	return (
-		<div className="min-h-screen bg-gray-50 flex">
-			{/* Sidebar */}
+		<div className="min-h-screen bg-gray-50 flex overflow-hidden">
 			<aside
 				className={`top-0 left-0 bg-white border-r border-gray-200 h-100vh flex-shrink-0 flex flex-col transition-all duration-150 z-50 ${
 					sidebarOpen ? "w-64" : "w-20"
@@ -1160,7 +1159,7 @@ export default function AdminPage() {
 				</nav>
 			</aside>
 			{/* Main Content */}
-			<main className="flex-1 px-4 sm:px-8 py-8">
+			<main className="flex-1 px-4 sm:px-8 py-8 w-3/4 overflow-hidden">
 				{/* Mobile sidebar toggle */}
 
 				{activeTab === "recruitment" && (
@@ -2968,7 +2967,7 @@ export default function AdminPage() {
 							</div>
 						) : (
 							// Student List View
-							<div className="space-y-6">
+							<div className="space-y-6 w-full">
 								<div className="flex items-center justify-between">
 									<div>
 										<h1 className="text-3xl font-bold text-navy-800">
@@ -3858,7 +3857,7 @@ export default function AdminPage() {
 				)}
 
 				{activeTab === "dashboard" && (
-					<>
+					<div className="">
 						<h1 className="text-3xl font-bold text-navy-800">
 							Dashboard Admin
 						</h1>
@@ -3973,10 +3972,9 @@ export default function AdminPage() {
 								</div>
 							</CardContent>
 						</Card>
-					</>
+					</div>
 				)}
 			</main>
-
 			{/* Request Changes Modal */}
 			<Dialog
 				open={requestChangesModalOpen}
